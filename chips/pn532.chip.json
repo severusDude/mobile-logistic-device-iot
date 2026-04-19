@@ -1,0 +1,6 @@
+{
+  "name": "pn532",
+  "author": "Danang S",
+  "pins": ["VCC", "GND", "SDA", "SCL"],
+  "controls": []
+}
