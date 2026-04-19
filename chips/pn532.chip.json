@@ -1,0 +1,6 @@
+{
+  "name": "pn532",
+  "author": "Danang S",
+  "pins": ["VCC", "GND", "i2c_sda", "i2c_scl"],
+  "controls": []
+}

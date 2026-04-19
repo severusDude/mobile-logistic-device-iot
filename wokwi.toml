@@ -6,3 +6,7 @@ elf = ".pio/build/esp32dev/firmware.elf"
 [[chip]]
 name = 'gps-neo6m'
 binary = 'chips/gps-neo6m.chip.wasm'
+
+[[chip]]
+name = 'pn532'
+binary = 'chips/pn532.chip.wasm'
