@@ -98,6 +98,8 @@
     ["esp:3V3", "pn532:VCC", "red", []],
     ["pn532:SDA", "esp:21", "blue", []],
     ["esp:22", "pn532:SCL", "yellow", []],
+    ["esp:19", "pn532:IRQ", "purple", []],
+    ["esp:23", "pn532:RST", "orange", []],
 
     ["esp:2", "r_wifi:1", "blue", []],
     ["r_wifi:2", "led_wifi:A", "blue", []],
