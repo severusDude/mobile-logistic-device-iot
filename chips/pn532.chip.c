@@ -4,7 +4,7 @@
 #include <string.h>
 
 // I2C address
-#define PN532_I2C_ADDRESS 0x48
+#define PN532_I2C_ADDRESS 0x24
 
 // Command codes
 #define PN532_COMMAND_GETFIRMWAREVERSION 0x02
@@ -27,6 +27,13 @@
 #define PN532_POSTAMBLE 0x00
 #define PN532_HOSTTOPN532 0xD4
 #define PN532_PN532TOHOST 0xD5
+// #define PN532_ACK_PACKET_SIZE 6
+// #define PN532_ACK_PACKET {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00}
+
+// Pure 6-byte ACK frame (no embedded ready byte).
+// The ready byte 0x01 is served separately at the start of every I2C read
+// transaction so that the Adafruit library's isready() poll and its
+// readdata() call each receive a fresh 0x01 leader as they expect.
 #define PN532_ACK_PACKET_SIZE 6
 #define PN532_ACK_PACKET {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00}
 
@@ -89,6 +96,11 @@ typedef struct
     uint8_t last_command;
     uint8_t last_sector;
     uint8_t last_block;
+
+    uint8_t ack_index;
+    uint8_t response_frame[128]; // full framed response goes here
+    uint16_t frame_length;       // length of the full frame
+    uint16_t frame_index;        // for sequential I2C reads (optional but recommended)
 } chip_state_t;
 
 // Function prototypes
@@ -107,6 +119,56 @@ static char hexchar(uint8_t val)
     if (val < 10)
         return '0' + val;
     return 'A' + (val - 10);
+}
+
+// Builds the full PN532 I2C frame (ready byte + preamble + checksums + postamble)
+static void prepare_full_response(chip_state_t *chip)
+{
+    if (chip->response_length == 0)
+    {
+        chip->frame_length = 0;
+        return;
+    }
+
+    uint8_t payload_len = chip->response_length;
+    uint8_t len = 1 + payload_len; // TFI + payload
+    uint8_t lcs = (uint8_t)(0x100 - len);
+
+    uint16_t sum = 0xD5; // TFI
+    for (uint8_t i = 0; i < payload_len; i++)
+    {
+        sum += chip->response_data[i];
+    }
+    uint8_t dcs = (uint8_t)(0x100 - (sum & 0xFF));
+
+    uint8_t *frame = chip->response_frame;
+    uint16_t idx = 0;
+
+    // === FULL CORRECT PN532 RESPONSE FRAME ===
+    frame[idx++] = 0x00; // Preamble
+    frame[idx++] = 0x00; // StartCode1
+    frame[idx++] = 0xFF; // StartCode2
+    frame[idx++] = len;
+    frame[idx++] = lcs;
+    frame[idx++] = 0xD5; // TFI (PN532 → host)
+
+    for (uint8_t i = 0; i < payload_len; i++)
+    {
+        frame[idx++] = chip->response_data[i];
+    }
+
+    frame[idx++] = dcs;
+    frame[idx++] = 0x00; // Postamble
+
+    chip->frame_length = idx;
+    chip->frame_index = 0;
+
+    printf("[chip-pn532] Response frame prepared (%d bytes): ", idx);
+    for (uint16_t i = 0; i < idx && i < 32; i++)
+    {
+        printf("%02X ", frame[i]);
+    }
+    printf("\n");
 }
 
 void chip_init()
@@ -154,6 +216,7 @@ void chip_init()
     chip->active_card_index = -1;
 
     printf("PN532 NFC/RFID Custom Chip initialized\n");
+    pin_write(chip->pin_irq, LOW);
 }
 
 static void initialize_virtual_card(virtual_card_t *card, int card_number)
@@ -224,120 +287,105 @@ static uint8_t on_i2c_read(void *user_data)
 {
     chip_state_t *chip = (chip_state_t *)user_data;
 
-    // Check attribute values for virtual card simulation
-    uint32_t card1_state = attr_read(chip->card1_button);
-    uint32_t card2_state = attr_read(chip->card2_button);
-    uint32_t reset_state = attr_read(chip->reset_button);
-
-    // Handle reset button
-    if (reset_state)
+    // Update virtual card state when idle
+    if (!chip->waiting_for_ack && !chip->waiting_for_response)
     {
-        chip->active_card_index = -1;
-        chip->cards[0].state = CARD_STATE_ABSENT;
-        chip->cards[1].state = CARD_STATE_ABSENT;
-        printf("Card field reset - all cards removed\n");
-    }
+        uint32_t card1_state = attr_read(chip->card1_button);
+        uint32_t card2_state = attr_read(chip->card2_button);
+        uint32_t reset_state = attr_read(chip->reset_button);
 
-    // Update card 1 state
-    if (card1_state && chip->cards[0].state == CARD_STATE_ABSENT)
-    {
-        chip->cards[0].state = CARD_STATE_PRESENT;
-        chip->active_card_index = 0;
-        chip->cards[1].state = CARD_STATE_ABSENT; // Only one card active at a time
-        printf("Card 1 placed in field\n");
-    }
-
-    // Update card 2 state
-    if (card2_state && chip->cards[1].state == CARD_STATE_ABSENT)
-    {
-        chip->cards[1].state = CARD_STATE_PRESENT;
-        chip->active_card_index = 1;
-        chip->cards[0].state = CARD_STATE_ABSENT; // Only one card active at a time
-        printf("Card 2 placed in field\n");
-    }
-
-    // If waiting for ACK, send ACK packet
-    if (chip->waiting_for_ack)
-    {
-        static uint8_t ack_index = 0;
-        static const uint8_t ack_packet[] = PN532_ACK_PACKET;
-
-        uint8_t byte = ack_packet[ack_index++];
-
-        if (ack_index >= PN532_ACK_PACKET_SIZE)
+        if (reset_state)
         {
-            ack_index = 0;
-            chip->waiting_for_ack = false;
-
-            // Process the command after sending the ACK
-            process_command(chip);
+            chip->active_card_index = -1;
+            chip->cards[0].state = CARD_STATE_ABSENT;
+            chip->cards[1].state = CARD_STATE_ABSENT;
+            printf("Card field reset - all cards removed\n");
         }
 
+        if (card1_state && chip->cards[0].state == CARD_STATE_ABSENT)
+        {
+            chip->cards[0].state = CARD_STATE_PRESENT;
+            chip->active_card_index = 0;
+            chip->cards[1].state = CARD_STATE_ABSENT;
+            printf("Card 1 placed in field\n");
+        }
+
+        if (card2_state && chip->cards[1].state == CARD_STATE_ABSENT)
+        {
+            chip->cards[1].state = CARD_STATE_PRESENT;
+            chip->active_card_index = 1;
+            chip->cards[0].state = CARD_STATE_ABSENT;
+            printf("Card 2 placed in field\n");
+        }
+    }
+
+    // === Serve ACK ===
+    // The Adafruit library issues two separate I2C read transactions per command:
+    //   Transaction 1 — isready():    reads 1 byte, expects 0x01 (= ready)
+    //   Transaction 2 — readdata(6):  reads 7 bytes internally (rbuff[n+1]);
+    //                                 rbuff[0] is a fresh ready byte (discarded),
+    //                                 rbuff[1..6] must equal {00,00,FF,00,FF,00}
+    //
+    // on_i2c_disconnect() resets ack_index to 0 between transactions, so every
+    // new I2C read starts at index 0 = ready byte, then 1..6 = ACK frame bytes.
+    if (chip->waiting_for_ack)
+    {
+        static const uint8_t ack_packet[] = PN532_ACK_PACKET;
+
+        if (chip->ack_index == 0)
+        {
+            // Start of any I2C read transaction while ACK is pending:
+            // always hand back the ready byte first.
+            chip->ack_index = 1;
+            printf("[chip-pn532] Serving ACK ready byte 0x01 (transaction start)\n");
+            return 0x01;
+        }
+
+        // Indices 1..6: stream the 6-byte ACK frame
+        uint8_t frame_pos = chip->ack_index - 1; // 0-based into ack_packet[]
+        uint8_t byte = ack_packet[frame_pos];
+        chip->ack_index++;
+        printf("[chip-pn532] Serving ACK frame byte %d/6: 0x%02X\n", frame_pos, byte);
+
+        if (chip->ack_index > PN532_ACK_PACKET_SIZE)
+        {
+            // All 6 ACK frame bytes have been delivered; the ACK exchange is done.
+            chip->ack_index = 0;
+            chip->waiting_for_ack = false;
+            printf("[chip-pn532] Full ACK delivered for command 0x%02X\n", chip->command);
+        }
         return byte;
     }
 
-    // If waiting for response, send response packet
-    if (chip->waiting_for_response)
+    // === Serve response (ready byte first, then full PN532 frame) ===
+    if (chip->waiting_for_response && chip->frame_length > 0)
     {
-        static uint8_t response_index = 0;
+        if (chip->frame_index == 0)
+        {
+            // First read = ready byte (what isready() and readdata's leading byte expect)
+            chip->frame_index = 1;
+            printf("[chip-pn532] Serving response ready byte 0x01\n");
+            return 0x01;
+        }
 
-        // First time starting response, send header
-        if (response_index == 0)
+        // Subsequent reads = actual frame bytes
+        if (chip->frame_index - 1 < chip->frame_length)
         {
-            response_index++;
-            return PN532_PREAMBLE;
-        }
-        else if (response_index == 1)
-        {
-            response_index++;
-            return PN532_STARTCODE1;
-        }
-        else if (response_index == 2)
-        {
-            response_index++;
-            return PN532_STARTCODE2;
-        }
-        else if (response_index == 3)
-        {
-            response_index++;
-            return chip->response_length + 1; // Length (TFI + response data)
-        }
-        else if (response_index == 4)
-        {
-            response_index++;
-            // Length checksum
-            return ~(chip->response_length + 1) + 1;
-        }
-        else if (response_index == 5)
-        {
-            response_index++;
-            return PN532_PN532TOHOST; // TFI
-        }
-        else if (response_index >= 6 && response_index < 6 + chip->response_length)
-        {
-            return chip->response_data[response_index++ - 6];
-        }
-        else if (response_index == 6 + chip->response_length)
-        {
-            // Calculate checksum
-            uint8_t sum = PN532_PN532TOHOST;
-            for (int i = 0; i < chip->response_length; i++)
+            uint8_t byte = chip->response_frame[chip->frame_index - 1];
+            chip->frame_index++;
+
+            if (chip->frame_index - 1 >= chip->frame_length)
             {
-                sum += chip->response_data[i];
+                chip->waiting_for_response = false;
+                chip->frame_index = 0;
+                printf("[chip-pn532] Full response frame delivered (%d bytes)\n", chip->frame_length);
             }
-            response_index++;
-            return ~sum + 1;
-        }
-        else if (response_index == 7 + chip->response_length)
-        {
-            response_index = 0;
-            chip->waiting_for_response = false;
-            return PN532_POSTAMBLE;
+            return byte;
         }
     }
 
-    // Default READY byte (for when not sending a specific response)
-    return 0x01;
+    // Idle / no data ready → return 0x00 (critical for clean polling)
+    return 0x00;
 }
 
 static bool on_i2c_write(void *user_data, uint8_t data)
@@ -447,12 +495,19 @@ static bool on_i2c_write(void *user_data, uint8_t data)
     case 8: // Postamble
         if (data == PN532_POSTAMBLE)
         {
-            // Valid frame received, set length and prepare to ACK
-            chip->command_length = frame_length - 1; // -1 because we don't include TFI
-            chip->waiting_for_ack = true;
+            // Valid frame received
+            chip->command_length = frame_length - 1;
 
-            // Start a timer to simulate processing time
-            timer_start(chip->timer, 1000, false); // 1ms delay
+            // (response frame is now ready before library starts reading ACK)
+            process_command(chip);
+
+            chip->waiting_for_ack = true;
+            chip->ack_index = 0; // ← CRITICAL: reset for every new command
+
+            // Keep tiny processing delay for realism (can be 1-10ms)
+            timer_start(chip->timer, 1000, false);
+
+            printf("[chip-pn532] Command 0x%02X received → ACK + response prepared immediately\n", chip->command);
         }
         frame_state = 0; // Reset
         break;
@@ -463,7 +518,18 @@ static bool on_i2c_write(void *user_data, uint8_t data)
 
 static void on_i2c_disconnect(void *user_data)
 {
-    // Nothing to do here
+    chip_state_t *chip = (chip_state_t *)user_data;
+
+    if (chip->waiting_for_ack)
+    {
+        chip->ack_index = 0;
+        printf("[chip-pn532] I2C disconnect mid-ACK — ack_index reset to 0 for next transaction\n");
+    }
+    if (chip->waiting_for_response)
+    {
+        chip->frame_index = 0;
+        printf("[chip-pn532] I2C disconnect mid-response — frame_index reset to 0 for next transaction\n");
+    }
 }
 
 static void on_timer(void *user_data)
@@ -478,8 +544,8 @@ static void process_command(chip_state_t *chip)
 {
     printf("Processing command: 0x%02X\n", chip->command);
 
-    // Set response frame parameters
     chip->waiting_for_response = true;
+    chip->response_length = 0; // will be set by each case
 
     switch (chip->command)
     {
@@ -517,14 +583,13 @@ static void process_command(chip_state_t *chip)
         if (chip->active_card_index >= 0 &&
             chip->cards[chip->active_card_index].state == CARD_STATE_PRESENT)
         {
-
             virtual_card_t *active_card = &chip->cards[chip->active_card_index];
 
             chip->response_data[1] = 0x01; // Number of targets found
             chip->response_data[2] = 0x01; // Target number
 
-            if (card_baud_rate == 0)
-            {                                                     // Mifare cards (ISO/IEC 14443A)
+            if (card_baud_rate == 0) // Mifare cards (ISO/IEC 14443A)
+            {
                 chip->response_data[3] = 0x00;                    // Card ATQA MSB
                 chip->response_data[4] = 0x04;                    // Card ATQA LSB
                 chip->response_data[5] = active_card->uid_length; // UID length
@@ -576,14 +641,13 @@ static void process_command(chip_state_t *chip)
         if (chip->active_card_index >= 0 &&
             chip->cards[chip->active_card_index].state == CARD_STATE_PRESENT)
         {
-
             virtual_card_t *active_card = &chip->cards[chip->active_card_index];
 
             switch (mifare_command)
             {
             case 0x60: // Auth A
-            case 0x61:
-            { // Auth B
+            case 0x61: // Auth B
+            {
                 uint8_t block_number = chip->command_data[3];
                 uint8_t *key = &chip->command_data[4]; // 6-byte key
                 int sector = block_number / 4;
@@ -684,10 +748,18 @@ static void process_command(chip_state_t *chip)
     }
 
     default:
-        // Unsupported command
         printf("Unsupported command: 0x%02X\n", chip->command);
-        chip->waiting_for_response = false; // Don't send any response
-        break;
+        chip->waiting_for_response = false;
+        return;
+    }
+
+    // === Build the properly framed response ===
+    if (chip->waiting_for_response && chip->response_length > 0)
+    {
+        prepare_full_response(chip);
+        chip->waiting_for_response = true;
+        chip->frame_index = 0;
+        pin_write(chip->pin_irq, LOW);
     }
 }
 
