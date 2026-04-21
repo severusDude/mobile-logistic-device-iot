@@ -1,6 +1,5 @@
 {
-  "name": "pn532",
-  "author": "Danang S",
-  "pins": ["VCC", "GND", "SDA", "SCL"],
-  "controls": []
+  "name": "PN532 NFC/RFID",
+  "author": "Adafruit",
+  "pins": ["SCL", "SDA", "IRQ", "RST", "REQ", "GND", "VCC", "BTN1", "BTN2", ""]
 }
