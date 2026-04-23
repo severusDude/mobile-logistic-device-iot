@@ -194,10 +194,16 @@ void cleanExpiredCooldowns();
 // =============================================================================
 void setup()
 {
+  Serial.setDebugOutput(false);
+  Serial.setTxBufferSize(2048);
+  Serial.flush();
+
   Serial.begin(115200);
   delay(500);
+
   Serial.println(F("\n[MOBILE] GPS Logistic Tracker — Mobile Device Firmware v2.0"));
   Serial.printf("[MOBILE] Device ID: %s | Role: %s\n", device.deviceId, device.role);
+  Serial.flush();
 
   // LED pins
   pinMode(PIN_LED_WIFI, OUTPUT);
@@ -215,6 +221,7 @@ void setup()
   // GPS Serial
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial.println(F("[GPS] UART2 initialised at 9600 baud"));
+  Serial.flush();
 
   // I2C + PN532
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -226,7 +233,7 @@ void setup()
   // runAllTests();
 
   uint32_t versiondata = rfid.getFirmwareVersion();
-  Serial.println(versiondata);
+  // Serial.println(versiondata);
   if (!versiondata)
   {
     Serial.println(F("[RFID] ERROR: PN532 not found — check wiring!"));
@@ -242,6 +249,8 @@ void setup()
     Serial.println(F("[RFID] SAM configured"));
   }
 
+  Serial.flush();
+
   // WiFi
   connectWifi();
 
@@ -253,6 +262,8 @@ void setup()
   connectMqtt();
 
   Serial.println(F("[MOBILE] Setup complete. Entering main loop."));
+  Serial.flush();
+  delay(200);
 }
 
 // =============================================================================
@@ -349,7 +360,10 @@ void setupTopics()
 // =============================================================================
 void connectWifi()
 {
-  Serial.printf("[WiFi] Connecting to %s ...\n", WIFI_SSID);
+  Serial.printf("[WiFi] Connecting to ");
+  Serial.print(WIFI_SSID);
+  Serial.print(" ...");
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long start = millis();
@@ -357,7 +371,12 @@ void connectWifi()
   {
     delay(250);
     Serial.print(".");
+    Serial.flush();
   }
+
+  Serial.println();
+  Serial.flush();
+
   if (WiFi.isConnected())
   {
     device.wifiConnected = true;
@@ -369,6 +388,8 @@ void connectWifi()
     Serial.println(F("\n[WiFi] Connection failed — will retry"));
     digitalWrite(PIN_LED_WIFI, LOW);
   }
+
+  Serial.flush();
 }
 
 // =============================================================================
@@ -382,10 +403,12 @@ void connectMqtt()
   {
     device.mqttConnected = true;
     Serial.println(F("[MQTT] Connected"));
+    Serial.flush();
     digitalWrite(PIN_LED_MQTT, HIGH);
     // Subscribe to command topic (QoS 2)
     mqttClient.subscribe(topicCmd, 2);
     Serial.printf("[MQTT] Subscribed to %s\n", topicCmd);
+    Serial.flush();
     // Publish initial heartbeat
     publishHeartbeat();
   }
@@ -393,7 +416,10 @@ void connectMqtt()
   {
     Serial.printf("[MQTT] Failed. rc=%d — will retry\n", mqttClient.state());
     digitalWrite(PIN_LED_MQTT, LOW);
+    Serial.flush();
   }
+
+  Serial.flush();
 }
 
 void mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -509,12 +535,16 @@ void publishTelemetry()
   }
   else
   {
-    Serial.printf("[TEL] seq=%u lat=%.6f lng=%.6f spd=%.1fkm/h fix=%s\n",
-                  telemetrySeq,
-                  device.gpsFix ? gps.location.lat() : 0.0,
-                  device.gpsFix ? gps.location.lng() : 0.0,
-                  device.gpsFix ? gps.speed.kmph() : 0.0,
-                  device.gpsFix ? "YES" : "NO");
+    char logBuf[120];
+    snprintf(logBuf, sizeof(logBuf),
+             "[TEL] #%u lat=%.4f lng=%.4f spd=%.1fkm/h fix=%s",
+             telemetrySeq,
+             device.gpsFix ? gps.location.lat() : 0.0,
+             device.gpsFix ? gps.location.lng() : 0.0,
+             device.gpsFix ? gps.speed.kmph() : 0.0,
+             device.gpsFix ? "YES" : "NO");
+    Serial.println(logBuf);
+    Serial.flush();
   }
 }
 
@@ -540,7 +570,9 @@ void publishHeartbeat()
   char payload[512];
   serializeJson(doc, payload, sizeof(payload));
   mqttClient.publish(topicHeartbeat, payload, false);
+
   Serial.printf("[HB] Heartbeat published. Uptime: %lds\n", device.uptimeSec);
+  Serial.flush();
 }
 
 // =============================================================================
@@ -596,7 +628,9 @@ void handleRfidScan()
 
   device.scansToday++;
   device.activePackageCount++;
+
   Serial.printf("[RFID] Tag scanned: %s | context: %s\n", epcStr, scanContext);
+  Serial.flush();
 }
 
 // =============================================================================
