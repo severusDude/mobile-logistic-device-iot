@@ -1,0 +1,15 @@
+name: "Duplicate cooldown"
+version: 1
+author: "Lutfi Fajar"
+
+steps:
+  - wait-serial: "Setup complete"
+  - write-serial: "SCENARIO PICKUP\n"
+  - wait-serial: "Next RFID scan context armed: pickup"
+  - set-control:
+      part-id: pn532
+      control: card1
+      value: 1
+  - wait-serial: "[SCENARIO] EPC=LOG-PKG-20260506-JKTWH-00001"
+  - wait-serial: "[SCENARIO] CTX=pickup"
+  - wait-serial: "in cooldown - suppressed"
