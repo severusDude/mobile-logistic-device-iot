@@ -1,88 +1,97 @@
 {
   "version": 1,
-  "author": "GPS Logistic Tracking — Mobile Device (Truck)",
+  "author": "Lutfi Fajar",
   "editor": "wokwi",
   "parts": [
     {
-      "id": "esp",
       "type": "board-esp32-devkit-c-v4",
-      "top": 160,
-      "left": 200,
+      "id": "esp",
+      "top": 200,
+      "left": 0,
       "attrs": {}
     },
     {
-      "id": "gps",
       "type": "chip-gps-neo6m",
-      "top": 0,
-      "left": 80,
+      "id": "gps",
+      "top": 50,
+      "left": -150,
       "attrs": {}
     },
     {
-      "id": "pn532",
       "type": "chip-pn532",
-      "top": 460,
-      "left": 80,
+      "id": "pn532",
+      "top": 50,
+      "left": 100,
       "attrs": {}
     },
     {
-      "id": "led_wifi",
-      "type": "wokwi-led",
-      "top": 310,
-      "left": 520,
-      "attrs": { "color": "blue", "label": "WiFi" }
+      "type": "wokwi-breadboard",
+      "id": "bb1",
+      "top": 150,
+      "left": 250,
+      "attrs": {}
+    },
+
+    {
+      "type": "wokwi-resistor",
+      "id": "r_gps",
+      "top": 195,
+      "left": 266,
+      "rotate": 90,
+      "attrs": { "value": "220" }
     },
     {
-      "id": "led_mqtt",
-      "type": "wokwi-led",
-      "top": 260,
-      "left": 520,
-      "attrs": { "color": "green", "label": "MQTT" }
+      "type": "wokwi-resistor",
+      "id": "r_rfid",
+      "top": 195,
+      "left": 316,
+      "rotate": 90,
+      "attrs": { "value": "220" }
     },
     {
-      "id": "led_rfid",
-      "type": "wokwi-led",
-      "top": 210,
-      "left": 520,
-      "attrs": { "color": "yellow", "label": "RFID" }
+      "type": "wokwi-resistor",
+      "id": "r_mqtt",
+      "top": 195,
+      "left": 366,
+      "rotate": 90,
+      "attrs": { "value": "220" }
     },
     {
+      "type": "wokwi-resistor",
+      "id": "r_wifi",
+      "top": 195,
+      "left": 416,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+
+    {
+      "type": "wokwi-led",
       "id": "led_gps",
-      "type": "wokwi-led",
-      "top": 160,
-      "left": 520,
+      "top": 255,
+      "left": 266,
       "attrs": { "color": "red", "label": "GPS Fix" }
     },
     {
-      "id": "r_wifi",
-      "type": "wokwi-resistor",
-      "top": 360,
-      "left": 468,
-      "rotate": 360,
-      "attrs": { "value": "220" }
+      "type": "wokwi-led",
+      "id": "led_rfid",
+      "top": 255,
+      "left": 316,
+      "attrs": { "color": "yellow", "label": "RFID" }
     },
     {
-      "id": "r_mqtt",
-      "type": "wokwi-resistor",
-      "top": 310,
-      "left": 468,
-      "rotate": 360,
-      "attrs": { "value": "220" }
+      "type": "wokwi-led",
+      "id": "led_mqtt",
+      "top": 255,
+      "left": 366,
+      "attrs": { "color": "green", "label": "MQTT" }
     },
     {
-      "id": "r_rfid",
-      "type": "wokwi-resistor",
-      "top": 260,
-      "left": 468,
-      "rotate": 360,
-      "attrs": { "value": "220" }
-    },
-    {
-      "id": "r_gps",
-      "type": "wokwi-resistor",
-      "top": 210,
-      "left": 468,
-      "rotate": 360,
-      "attrs": { "value": "220" }
+      "type": "wokwi-led",
+      "id": "led_wifi",
+      "top": 255,
+      "left": 416,
+      "attrs": { "color": "blue", "label": "WiFi" }
     }
   ],
   "connections": [
@@ -90,7 +99,7 @@
     ["esp:RX", "$serialMonitor:TX", "", []],
 
     ["esp:GND.1", "gps:GND", "black", []],
-    ["esp:VIN", "gps:VCC", "red", []],
+    ["esp:5V", "gps:VCC", "red", []],
     ["gps:TX", "esp:RX", "green", []],
     ["esp:TX", "gps:RX", "orange", []],
 
@@ -101,25 +110,37 @@
     ["esp:19", "pn532:IRQ", "purple", []],
     ["esp:23", "pn532:RST", "orange", []],
 
-    ["esp:2", "r_wifi:1", "blue", []],
-    ["r_wifi:2", "led_wifi:A", "blue", []],
-    ["led_wifi:K", "esp:GND.1", "black", []],
+    ["esp:GND.3", "bb1:bn.1", "black", []],
 
-    ["esp:4", "r_mqtt:1", "green", []],
-    ["r_mqtt:2", "led_mqtt:A", "green", []],
-    ["led_mqtt:K", "esp:GND.1", "black", []],
+    ["esp:18", "bb1:2t.a", "red", []],
+    ["esp:5", "bb1:7t.a", "yellow", []],
+    ["esp:4", "bb1:12t.a", "green", []],
+    ["esp:2", "bb1:17t.a", "blue", []],
 
-    ["esp:5", "r_rfid:1", "yellow", []],
-    ["r_rfid:2", "led_rfid:A", "yellow", []],
-    ["led_rfid:K", "esp:GND.1", "black", []],
+    ["bb1:2t.e", "r_gps:1", "red", []],
+    ["bb1:7t.e", "r_rfid:1", "yellow", []],
+    ["bb1:12t.e", "r_mqtt:1", "green", []],
+    ["bb1:17t.e", "r_wifi:1", "blue", []],
 
-    ["esp:18", "r_gps:1", "red", []],
-    ["r_gps:2", "led_gps:A", "red", []],
-    ["led_gps:K", "esp:GND.1", "black", []]
+    ["r_gps:2", "bb1:4t.f", "red", []],
+    ["r_rfid:2", "bb1:9t.f", "yellow", []],
+    ["r_mqtt:2", "bb1:14t.f", "green", []],
+    ["r_wifi:2", "bb1:19t.f", "blue", []],
+
+    ["bb1:4t.j", "led_gps:A", "red", []],
+    ["bb1:9t.j", "led_rfid:A", "yellow", []],
+    ["bb1:14t.j", "led_mqtt:A", "green", []],
+    ["bb1:19t.j", "led_wifi:A", "blue", []],
+
+    ["led_gps:C", "bb1:bn.5", "black", []],
+    ["led_rfid:C", "bb1:bn.10", "black", []],
+    ["led_mqtt:C", "bb1:bn.15", "black", []],
+    ["led_wifi:C", "bb1:bn.20", "black", []]
   ],
   "serialMonitor": {
+    "convertEol": true,
     "display": "terminal",
-    "newline": "lf",
-    "convertEol": true
-  }
+    "newline": "lf"
+  },
+  "dependencies": {}
 }
