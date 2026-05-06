@@ -19,6 +19,8 @@
 ## Table of Contents
 
 1. [System Overview](#1-system-overview)
+   - [Implementation Status Snapshot - May 6, 2026](#implementation-status-snapshot---may-6-2026)
+   - [Milestones And Verification Tracker](#milestones-and-verification-tracker)
 2. [Architecture Principles & Design Decisions](#2-architecture-principles--design-decisions)
 3. [Component Architecture](#3-component-architecture)
 4. [Device Model](#4-device-model)
@@ -70,6 +72,66 @@ In this architecture, **intelligence lives in the device, not the package.** Eac
 │  MQTT Broker (Mosquitto)     │
 └──────────────────────────────┘
 ```
+
+---
+
+## Implementation Status Snapshot - May 6, 2026
+
+This section tracks the real implementation state of the current repository against the architecture described in this document.
+
+| Area                                           | Current State                                                                     | Verification Status                                                      | Notes                                                                                                                                                                                   |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mobile ESP32 firmware                          | Implemented                                                                       | User-reported Wokwi run successful; independent CLI verification pending | Firmware targets one truck/delivery van device using ESP32, GPS, PN532 RFID, WiFi, MQTT, heartbeat, telemetry, scan publishing, command handling, offline buffering, and RFID cooldown. |
+| Wokwi simulation wiring                        | Implemented                                                                       | User-reported successful run in VS Code Wokwi simulator                  | `diagram.json` and `wokwi.toml` define ESP32, custom NEO-6M GPS chip, custom PN532 chip, status LEDs, and generated firmware paths.                                                     |
+| GPS telemetry every 5 seconds                  | Implemented in firmware                                                           | Pending serial or MQTT payload proof                                     | Firmware publishes mobile telemetry every `TELEMETRY_INTERVAL_MS` with GPS fix state, coordinates, accuracy, speed, and signal fields.                                                  |
+| RFID scan publishing                           | Implemented in firmware                                                           | Pending tag scan proof                                                   | PN532 reads tag UID, maps it to `LOG-{uid}` EPC format, applies 30-second cooldown, and publishes scan payloads.                                                                        |
+| MQTT mobile topics                             | Implemented in firmware                                                           | Broker/backend integration unverified                                    | Firmware publishes `telemetry`, `scan`, and `heartbeat`, and subscribes to `cmd` under `logistics/mobile/{device_id}/...`.                                                              |
+| Remote commands                                | Implemented in firmware                                                           | End-to-end command delivery unverified                                   | Supported commands: `update_role`, `force_scan`, `set_cooldown`, and `reboot`.                                                                                                          |
+| Offline event buffer                           | Implemented in firmware                                                           | Reconnect scenario unverified                                            | RAM buffer stores up to 50 events when MQTT publish is unavailable and flushes after reconnect.                                                                                         |
+| Firmware tests                                 | Test harness exists                                                               | Not active in normal boot                                                | `runAllTests()` is present but commented out in `setup()`, so automated runtime tests are not currently executed.                                                                       |
+| PlatformIO build from this shell               | Run on powershell `pio run`                                                       | Tested compiled succesfully                                              | PlatformIO is used to compile project                                                                                                                                                   |
+| Wokwi CLI Simulation verification              | Ran `wokwi-cli --timeout 10000 --serial-log-file logs/wokwi-cli-{datetime}.log .` | Success                                                                  | Logged serial output from Mobile device setup, WiFi, MQTT, GPS, RFID Reader, Heartbeat, and Telemetry                                                                                   |
+| Fixed device simulator                         | Not implemented in this repo                                                      | Not started                                                              | Architecture describes fixed readers, but current repo contains only mobile-device firmware/simulation assets.                                                                          |
+| Backend, frontend, database, broker deployment | Not implemented in this repo                                                      | Not started                                                              | Node/Express backend, React dashboard, PostgreSQL/PostGIS, Mosquitto deployment, RFID Event Processor, and Device Registry are architecture targets, not current repository code.       |
+
+---
+
+## Milestones And Verification Tracker
+
+| Milestone                                  | Status                                                        | Evidence Needed                                                                                | Update Rule                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| M1 - Firmware compiles from current source | Pending independent CLI verification                          | `pio run` succeeds from the current source tree                                                | Mark pass only after a fresh successful build is captured.                         |
+| M2 - Wokwi boots firmware                  | Pending CLI verification; user-reported pass in VS Code Wokwi | Serial log shows firmware boot and setup completion                                            | Mark pass after Wokwi CLI or saved VS Code serial log confirms boot.               |
+| M3 - GPS telemetry                         | Implemented, pending proof                                    | Serial or MQTT payload shows telemetry emitted every 5 seconds with valid or no-fix GPS fields | Mark pass after at least two consecutive telemetry events are captured.            |
+| M4 - PN532/RFID scan                       | Implemented, pending proof                                    | Tag is detected and scan payload is published                                                  | Mark pass after scan log includes EPC and scan context.                            |
+| M5 - MQTT connectivity                     | Implemented, pending proof                                    | WiFi connected, MQTT connected, and heartbeat/telemetry publish is observed                    | Mark pass after broker or serial output confirms successful publish.               |
+| M6 - Remote command handling               | Implemented, pending proof                                    | Command is received and role update, force scan, or reboot behavior is observed                | Mark pass after a command round trip is captured.                                  |
+| M7 - Backend integration                   | Not started in this repo                                      | Backend subscriber receives firmware MQTT payloads and persists or broadcasts events           | Mark pass only after backend component exists and consumes real firmware payloads. |
+| M8 - Full architecture MVP                 | Not started in this repo                                      | Backend, frontend, database, broker, fixed device, and mobile device run together              | Mark pass after end-to-end package tracking scenario works across all layers.      |
+
+### Verification Commands
+
+Compile project
+
+```powershell
+pio run
+```
+
+Running simulation
+
+```powershell
+wokwi-cli --timeout 10000 --serial-log-file logs/wokwi-cli-{datetime}.log .
+```
+
+Acceptance evidence for the next documentation update:
+
+- Build output succeeds from the current source tree.
+- Wokwi serial log includes boot, GPS init, PN532 init or controlled PN532 warning, WiFi/MQTT status, heartbeat, and telemetry.
+- Optional MQTT subscriber captures actual JSON payloads from the simulated device.
+
+Assumptions:
+
+- This document must not claim backend or full-stack completion until those components exist in the repository or a linked implementation.
 
 ---
 
