@@ -1,5 +1,31 @@
 {
   "name": "PN532 NFC/RFID",
   "author": "Adafruit",
-  "pins": ["SCL", "SDA", "IRQ", "RST", "REQ", "GND", "VCC", "BTN1", "BTN2", ""]
+  "pins": ["SCL", "SDA", "IRQ", "RST", "REQ", "GND", "VCC", "BTN1", "BTN2", ""],
+  "controls": [
+    {
+      "id": "card1",
+      "label": "Package 1 card",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 1
+    },
+    {
+      "id": "card2",
+      "label": "Package 2 card",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 1
+    },
+    {
+      "id": "reset",
+      "label": "Clear card field",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 1
+    }
+  ]
 }
