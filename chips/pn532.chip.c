@@ -590,18 +590,18 @@ static void process_command(chip_state_t *chip)
 
             if (card_baud_rate == 0) // Mifare cards (ISO/IEC 14443A)
             {
-                chip->response_data[3] = 0x00;                    // Card ATQA MSB
-                chip->response_data[4] = 0x04;                    // Card ATQA LSB
-                chip->response_data[5] = active_card->uid_length; // UID length
+                // Match the packet layout expected by Adafruit_PN532:
+                // count, target, SENS_RES[2], SEL_RES, NFCID Length, NFCID bytes
+                chip->response_data[3] = 0x00;                         // Card ATQA MSB
+                chip->response_data[4] = 0x04;                         // Card ATQA LSB
+                chip->response_data[5] = 0x08;                         // SAK / SEL_RES for Mifare Classic 1K
+                chip->response_data[6] = active_card->uid_length;      // UID length
 
                 // Copy UID
                 for (int i = 0; i < active_card->uid_length; i++)
                 {
-                    chip->response_data[6 + i] = active_card->uid[i];
+                    chip->response_data[7 + i] = active_card->uid[i];
                 }
-
-                // SAK byte after UID
-                chip->response_data[6 + active_card->uid_length] = 0x08; // Mifare Classic 1K
 
                 chip->response_length = 7 + active_card->uid_length;
 

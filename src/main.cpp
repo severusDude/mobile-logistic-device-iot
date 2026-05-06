@@ -60,7 +60,7 @@
 #define LOCATION_NAME "Jakarta Warehouse Truck 007"
 #endif
 #ifndef SCHEMA_VERSION
-#define SCHEMA_VERSION "2.0"
+#define SCHEMA_VERSION "2.1"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -125,6 +125,25 @@ std::vector<BufferedEvent> eventBuffer;
 std::map<std::string, unsigned long> rfidCooldownMap;
 
 // ---------------------------------------------------------------------------
+// Simulated package manifest for Wokwi PN532 card scenarios
+// ---------------------------------------------------------------------------
+struct SimulatedPackage
+{
+  const char *uidHex;
+  const char *epc;
+  bool onboard;
+};
+
+SimulatedPackage simulatedPackages[] = {
+    {"DEADBEEF", "LOG-PKG-20260506-JKTWH-00001", false},
+    {"CAFEBABE", "LOG-PKG-20260506-JKTWH-00002", false},
+};
+
+char scenarioScanContext[16] = "";
+bool scenarioContextArmed = false;
+String serialCommandBuffer;
+
+// ---------------------------------------------------------------------------
 // Device runtime state
 // ---------------------------------------------------------------------------
 struct DeviceState
@@ -177,6 +196,8 @@ void publishTelemetry();
 void publishHeartbeat();
 void publishScanEvent(const char *epcStr, const char *scanContext);
 void handleRfidScan();
+void handleSerialScenarioCommands();
+void processScenarioCommand(String command);
 void flushEventBuffer();
 void bufferEvent(const char *topic, const char *payload, uint8_t qos);
 bool publishWithBuffer(const char *topic, const char *payload, uint8_t qos, bool retained = false);
@@ -188,6 +209,11 @@ String buildTimestamp();
 bool isTagInCooldown(const std::string &epc);
 void markTagCooldown(const std::string &epc);
 void cleanExpiredCooldowns();
+const char *resolvePackageEpc(const char *uidHex);
+const char *resolveScanContext();
+void updatePackageCounters(const char *uidHex, const char *scanContext);
+int findSimulatedPackage(const char *uidHex);
+void resetScenarioState();
 
 // =============================================================================
 // SETUP
@@ -201,7 +227,7 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  Serial.println(F("\n[MOBILE] GPS Logistic Tracker — Mobile Device Firmware v2.0"));
+  Serial.println(F("\n[MOBILE] GPS Logistic Tracker - Mobile Device Firmware v2.1"));
   Serial.printf("[MOBILE] Device ID: %s | Role: %s\n", device.deviceId, device.role);
   Serial.flush();
 
@@ -272,6 +298,9 @@ void setup()
 void loop()
 {
   unsigned long now = millis();
+
+  // --- Wokwi scenario command parser (serial-only test input) ---
+  handleSerialScenarioCommands();
 
   // --- Feed GPS parser ---
   while (gpsSerial.available())
@@ -488,6 +517,90 @@ void handleCommand(JsonDocument &cmd)
 }
 
 // =============================================================================
+// SERIAL SCENARIO COMMANDS
+// =============================================================================
+void handleSerialScenarioCommands()
+{
+  while (Serial.available())
+  {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r')
+    {
+      if (serialCommandBuffer.length() > 0)
+      {
+        processScenarioCommand(serialCommandBuffer);
+        serialCommandBuffer = "";
+      }
+      continue;
+    }
+
+    if (serialCommandBuffer.length() < 96)
+    {
+      serialCommandBuffer += c;
+    }
+    else
+    {
+      serialCommandBuffer = "";
+      Serial.println(F("[SCENARIO] Command too long - discarded"));
+    }
+  }
+}
+
+void processScenarioCommand(String command)
+{
+  command.trim();
+  command.toUpperCase();
+
+  if (command.length() == 0)
+    return;
+
+  if (command == "FORCE_SCAN")
+  {
+    Serial.println(F("[SCENARIO] FORCE_SCAN received - cooldown cleared and RFID scan requested"));
+    rfidCooldownMap.clear();
+    handleRfidScan();
+    return;
+  }
+
+  if (!command.startsWith("SCENARIO "))
+  {
+    Serial.printf("[SCENARIO] Unknown serial command: %s\n", command.c_str());
+    return;
+  }
+
+  String mode = command.substring(9);
+  mode.trim();
+
+  if (mode == "PICKUP")
+  {
+    strlcpy(scenarioScanContext, "pickup", sizeof(scenarioScanContext));
+    scenarioContextArmed = true;
+    Serial.println(F("[SCENARIO] Next RFID scan context armed: pickup"));
+  }
+  else if (mode == "IN_TRANSIT")
+  {
+    strlcpy(scenarioScanContext, "in_transit", sizeof(scenarioScanContext));
+    scenarioContextArmed = true;
+    Serial.println(F("[SCENARIO] Next RFID scan context armed: in_transit"));
+  }
+  else if (mode == "DELIVERED")
+  {
+    strlcpy(scenarioScanContext, "delivered", sizeof(scenarioScanContext));
+    scenarioContextArmed = true;
+    Serial.println(F("[SCENARIO] Next RFID scan context armed: delivered"));
+  }
+  else if (mode == "RESET")
+  {
+    resetScenarioState();
+    Serial.println(F("[SCENARIO] Scenario state reset"));
+  }
+  else
+  {
+    Serial.printf("[SCENARIO] Unsupported mode: %s\n", mode.c_str());
+  }
+}
+
+// =============================================================================
 // GPS TELEMETRY PUBLISH  (QoS 1, retained)
 // =============================================================================
 void publishTelemetry()
@@ -580,7 +693,7 @@ void publishHeartbeat()
 // =============================================================================
 void handleRfidScan()
 {
-  uint8_t uid[7];
+  uint8_t uid[16] = {0};
   uint8_t uidLen = 0;
 
   // Non-blocking read attempt (timeout = 50ms for responsiveness)
@@ -590,35 +703,29 @@ void handleRfidScan()
 
   // Build a hex EPC string from the raw UID bytes
   // In simulation the PN532 chip returns tag UIDs; we reconstruct EPC from them
-  char epcHex[32] = {0};
-  for (uint8_t i = 0; i < uidLen; i++)
+  const uint8_t safeUidLen = uidLen > 7 ? 7 : uidLen;
+  char uidHex[32] = {0};
+  for (uint8_t i = 0; i < safeUidLen; i++)
   {
-    snprintf(epcHex + (i * 2), sizeof(epcHex) - (i * 2), "%02X", uid[i]);
+    snprintf(uidHex + (i * 2), sizeof(uidHex) - (i * 2), "%02X", uid[i]);
   }
 
-  // Map hex UID → EPC format expected by backend: "LOG-PKG-YYYYMMDD-FACILITY-NNNNN"
-  // In a real system the EPC is pre-encoded on the tag.
-  // For simulation we prefix with "LOG-" to signal a logistics tag.
+  // Map known Wokwi virtual card UIDs to simulated logistics package EPCs.
+  // Unknown tags keep the generic LOG-{UID} fallback.
   char epcStr[64];
-  snprintf(epcStr, sizeof(epcStr), "LOG-%s", epcHex);
+  strlcpy(epcStr, resolvePackageEpc(uidHex), sizeof(epcStr));
 
   std::string epcKey(epcStr);
 
   // --- Cooldown check (30s per tag) ---
   if (isTagInCooldown(epcKey))
   {
-    Serial.printf("[RFID] Tag %s in cooldown — suppressed\n", epcStr);
+    Serial.printf("[RFID] Tag %s in cooldown - suppressed\n", epcStr);
     return;
   }
   markTagCooldown(epcKey);
 
-  // Determine scan context based on device motion
-  const char *scanContext = "in_transit";
-  if (gps.speed.isValid() && gps.speed.kmph() < 2.0)
-  {
-    // Stationary — likely at pickup or delivery point
-    scanContext = "pickup"; // operator can refine via cmd
-  }
+  const char *scanContext = resolveScanContext();
 
   // Flash RFID LED
   digitalWrite(PIN_LED_RFID, HIGH);
@@ -627,10 +734,21 @@ void handleRfidScan()
   digitalWrite(PIN_LED_RFID, LOW);
 
   device.scansToday++;
-  device.activePackageCount++;
+  updatePackageCounters(uidHex, scanContext);
 
-  Serial.printf("[RFID] Tag scanned: %s | context: %s\n", epcStr, scanContext);
+  Serial.printf("[RFID] Tag scanned: %s | uid=%s | ctx=%s | active=%d | scans_today=%d\n",
+                epcStr, uidHex, scanContext, device.activePackageCount, device.scansToday);
   Serial.flush();
+
+  if (scenarioContextArmed)
+  {
+    Serial.printf("[SCENARIO] EPC=%s\n", epcStr);
+    Serial.printf("[SCENARIO] CTX=%s\n", scanContext);
+    Serial.printf("[SCENARIO] ACTIVE=%d\n", device.activePackageCount);
+    scenarioContextArmed = false;
+    scenarioScanContext[0] = '\0';
+    Serial.println(F("[SCENARIO] Scan context consumed"));
+  }
 }
 
 // =============================================================================
@@ -765,6 +883,97 @@ void cleanExpiredCooldowns()
     {
       ++it;
     }
+  }
+}
+
+// =============================================================================
+// SIMULATED PACKAGE HELPERS
+// =============================================================================
+const char *resolvePackageEpc(const char *uidHex)
+{
+  int index = findSimulatedPackage(uidHex);
+  if (index >= 0)
+  {
+    return simulatedPackages[index].epc;
+  }
+
+  static char fallbackEpc[64];
+  snprintf(fallbackEpc, sizeof(fallbackEpc), "LOG-%s", uidHex);
+  return fallbackEpc;
+}
+
+const char *resolveScanContext()
+{
+  if (scenarioContextArmed && scenarioScanContext[0] != '\0')
+  {
+    return scenarioScanContext;
+  }
+
+  if (gps.speed.isValid() && gps.speed.kmph() < 2.0)
+  {
+    return "pickup";
+  }
+  return "in_transit";
+}
+
+void updatePackageCounters(const char *uidHex, const char *scanContext)
+{
+  int index = findSimulatedPackage(uidHex);
+
+  if (strcmp(scanContext, "pickup") == 0)
+  {
+    if (index >= 0)
+    {
+      if (!simulatedPackages[index].onboard)
+      {
+        simulatedPackages[index].onboard = true;
+        device.activePackageCount++;
+      }
+      return;
+    }
+
+    device.activePackageCount++;
+  }
+  else if (strcmp(scanContext, "delivered") == 0)
+  {
+    if (index >= 0)
+    {
+      if (simulatedPackages[index].onboard)
+      {
+        simulatedPackages[index].onboard = false;
+        if (device.activePackageCount > 0)
+          device.activePackageCount--;
+      }
+      return;
+    }
+
+    if (device.activePackageCount > 0)
+      device.activePackageCount--;
+  }
+}
+
+int findSimulatedPackage(const char *uidHex)
+{
+  for (size_t i = 0; i < sizeof(simulatedPackages) / sizeof(simulatedPackages[0]); i++)
+  {
+    if (strcmp(uidHex, simulatedPackages[i].uidHex) == 0)
+    {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+void resetScenarioState()
+{
+  scenarioContextArmed = false;
+  scenarioScanContext[0] = '\0';
+  rfidCooldownMap.clear();
+  device.activePackageCount = 0;
+  device.scansToday = 0;
+  for (size_t i = 0; i < sizeof(simulatedPackages) / sizeof(simulatedPackages[0]); i++)
+  {
+    simulatedPackages[i].onboard = false;
   }
 }
 

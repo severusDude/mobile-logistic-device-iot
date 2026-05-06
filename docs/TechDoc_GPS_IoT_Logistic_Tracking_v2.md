@@ -2,17 +2,15 @@
 
 ## IoT GPS-Based Logistic Package Tracking System
 
-**Version:** 2.0 (Architecture Revision — Device-Centric RFID Model)
+**Version:** 2.1 (Architecture Revision — Device-Centric RFID Model + Testable Wokwi Scan Scenarios)
 
 **Audience:** Full-Stack Engineering Team
 
 **Stack:** Node.js + Express · MQTT · WebSocket · React.js
 
-**Date:** April 18, 2026
+**Date:** May 6, 2026
 
 **Scope:** Simulated IoT — Architecture & Design Reference
-
-> **What changed from v1.0:** The previous architecture assigned one GPS simulator per package. This revision replaces that model with a **device-centric architecture** — one IoT device per area or vehicle, aware of its own GPS position and role. Packages carry passive RFID tags and have no sensors of their own. A device detects packages by scanning their RFID tags when they enter its read range, then publishes that event to the platform.
 
 ---
 
@@ -21,6 +19,8 @@
 1. [System Overview](#1-system-overview)
    - [Implementation Status Snapshot - May 6, 2026](#implementation-status-snapshot---may-6-2026)
    - [Milestones And Verification Tracker](#milestones-and-verification-tracker)
+   - [Simulated Package Scanning](#simulated-package-scanning)
+   - [Testable Wokwi Scenarios](#testable-wokwi-scenarios)
 2. [Architecture Principles & Design Decisions](#2-architecture-principles--design-decisions)
 3. [Component Architecture](#3-component-architecture)
 4. [Device Model](#4-device-model)
@@ -84,12 +84,14 @@ This section tracks the real implementation state of the current repository agai
 | Mobile ESP32 firmware                          | Implemented                                                                       | User-reported Wokwi run successful; independent CLI verification pending | Firmware targets one truck/delivery van device using ESP32, GPS, PN532 RFID, WiFi, MQTT, heartbeat, telemetry, scan publishing, command handling, offline buffering, and RFID cooldown. |
 | Wokwi simulation wiring                        | Implemented                                                                       | User-reported successful run in VS Code Wokwi simulator                  | `diagram.json` and `wokwi.toml` define ESP32, custom NEO-6M GPS chip, custom PN532 chip, status LEDs, and generated firmware paths.                                                     |
 | GPS telemetry every 5 seconds                  | Implemented in firmware                                                           | Pending serial or MQTT payload proof                                     | Firmware publishes mobile telemetry every `TELEMETRY_INTERVAL_MS` with GPS fix state, coordinates, accuracy, speed, and signal fields.                                                  |
-| RFID scan publishing                           | Implemented in firmware                                                           | Pending tag scan proof                                                   | PN532 reads tag UID, maps it to `LOG-{uid}` EPC format, applies 30-second cooldown, and publishes scan payloads.                                                                        |
+| RFID scan publishing                           | Implemented in firmware                                                           | Scenario verification pending                                            | PN532 reads tag UID, maps known package UIDs to deterministic EPCs, applies 30-second cooldown, and publishes scan payloads.                                                            |
+| Simulated package scanning                     | Implemented                                                                       | Scenario verification pending                                            | Wokwi PN532 card controls expose two simulated package RFID cards: `DEADBEEF` and `CAFEBABE`.                                                                                           |
+| Wokwi automation scenarios                     | Implemented                                                                       | Pending CLI scenario run                                                 | Scenario YAML files cover single pickup, two-package pickup, duplicate cooldown, and delivery scan flows. This shell still needs `WOKWI_CLI_TOKEN` to execute them.                     |
 | MQTT mobile topics                             | Implemented in firmware                                                           | Broker/backend integration unverified                                    | Firmware publishes `telemetry`, `scan`, and `heartbeat`, and subscribes to `cmd` under `logistics/mobile/{device_id}/...`.                                                              |
 | Remote commands                                | Implemented in firmware                                                           | End-to-end command delivery unverified                                   | Supported commands: `update_role`, `force_scan`, `set_cooldown`, and `reboot`.                                                                                                          |
 | Offline event buffer                           | Implemented in firmware                                                           | Reconnect scenario unverified                                            | RAM buffer stores up to 50 events when MQTT publish is unavailable and flushes after reconnect.                                                                                         |
 | Firmware tests                                 | Test harness exists                                                               | Not active in normal boot                                                | `runAllTests()` is present but commented out in `setup()`, so automated runtime tests are not currently executed.                                                                       |
-| PlatformIO build from this shell               | Run on powershell `pio run`                                                       | Tested compiled succesfully                                              | PlatformIO is used to compile project                                                                                                                                                   |
+| PlatformIO build from this shell               | Run with `C:\Users\Lutfi\.platformio\penv\Scripts\pio.exe run`                    | Tested compiled successfully                                             | Build completed successfully after allowing PlatformIO to write lock/cache files under the user profile.                                                                                |
 | Wokwi CLI Simulation verification              | Ran `wokwi-cli --timeout 10000 --serial-log-file logs/wokwi-cli-{datetime}.log .` | Success                                                                  | Logged serial output from Mobile device setup, WiFi, MQTT, GPS, RFID Reader, Heartbeat, and Telemetry                                                                                   |
 | Fixed device simulator                         | Not implemented in this repo                                                      | Not started                                                              | Architecture describes fixed readers, but current repo contains only mobile-device firmware/simulation assets.                                                                          |
 | Backend, frontend, database, broker deployment | Not implemented in this repo                                                      | Not started                                                              | Node/Express backend, React dashboard, PostgreSQL/PostGIS, Mosquitto deployment, RFID Event Processor, and Device Registry are architecture targets, not current repository code.       |
@@ -98,16 +100,20 @@ This section tracks the real implementation state of the current repository agai
 
 ## Milestones And Verification Tracker
 
-| Milestone                                  | Status                                                        | Evidence Needed                                                                                | Update Rule                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| M1 - Firmware compiles from current source | Pending independent CLI verification                          | `pio run` succeeds from the current source tree                                                | Mark pass only after a fresh successful build is captured.                         |
-| M2 - Wokwi boots firmware                  | Pending CLI verification; user-reported pass in VS Code Wokwi | Serial log shows firmware boot and setup completion                                            | Mark pass after Wokwi CLI or saved VS Code serial log confirms boot.               |
-| M3 - GPS telemetry                         | Implemented, pending proof                                    | Serial or MQTT payload shows telemetry emitted every 5 seconds with valid or no-fix GPS fields | Mark pass after at least two consecutive telemetry events are captured.            |
-| M4 - PN532/RFID scan                       | Implemented, pending proof                                    | Tag is detected and scan payload is published                                                  | Mark pass after scan log includes EPC and scan context.                            |
-| M5 - MQTT connectivity                     | Implemented, pending proof                                    | WiFi connected, MQTT connected, and heartbeat/telemetry publish is observed                    | Mark pass after broker or serial output confirms successful publish.               |
-| M6 - Remote command handling               | Implemented, pending proof                                    | Command is received and role update, force scan, or reboot behavior is observed                | Mark pass after a command round trip is captured.                                  |
-| M7 - Backend integration                   | Not started in this repo                                      | Backend subscriber receives firmware MQTT payloads and persists or broadcasts events           | Mark pass only after backend component exists and consumes real firmware payloads. |
-| M8 - Full architecture MVP                 | Not started in this repo                                      | Backend, frontend, database, broker, fixed device, and mobile device run together              | Mark pass after end-to-end package tracking scenario works across all layers.      |
+| Milestone                                  | Status                                                        | Evidence Needed                                                                                            | Update Rule                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| M1 - Firmware compiles from current source | Passed on May 6, 2026                                         | PlatformIO build succeeds from the current source tree                                                     | Re-run after firmware changes.                                                     |
+| M2 - Wokwi boots firmware                  | Pending CLI verification; user-reported pass in VS Code Wokwi | Serial log shows firmware boot and setup completion                                                        | Mark pass after Wokwi CLI or saved VS Code serial log confirms boot.               |
+| M3 - GPS telemetry                         | Implemented, pending proof                                    | Serial or MQTT payload shows telemetry emitted every 5 seconds with valid or no-fix GPS fields             | Mark pass after at least two consecutive telemetry events are captured.            |
+| M4 - PN532/RFID scan                       | Implemented, scenario proof pending                           | Tag is detected and scan payload is published                                                              | Mark pass after scan log includes EPC and scan context.                            |
+| M5 - MQTT connectivity                     | Implemented, pending proof                                    | WiFi connected, MQTT connected, and heartbeat/telemetry publish is observed                                | Mark pass after broker or serial output confirms successful publish.               |
+| M6 - Remote command handling               | Implemented, pending proof                                    | Command is received and role update, force scan, or reboot behavior is observed                            | Mark pass after a command round trip is captured.                                  |
+| M7 - Backend integration                   | Not started in this repo                                      | Backend subscriber receives firmware MQTT payloads and persists or broadcasts events                       | Mark pass only after backend component exists and consumes real firmware payloads. |
+| M8 - Full architecture MVP                 | Not started in this repo                                      | Backend, frontend, database, broker, fixed device, and mobile device run together                          | Mark pass after end-to-end package tracking scenario works across all layers.      |
+| M9 - Wokwi pickup package 1 scenario       | Implemented, pending run                                      | `pickup-package-1.yaml` captures package 1 EPC with `[SCENARIO] CTX=pickup` and `[SCENARIO] ACTIVE=1`      | Mark pass after Wokwi CLI scenario completes successfully.                         |
+| M10 - Wokwi pickup two packages scenario   | Implemented, pending run                                      | `pickup-two-packages.yaml` captures both package EPCs and `[SCENARIO] ACTIVE=2`                            | Mark pass after Wokwi CLI scenario completes successfully.                         |
+| M11 - Wokwi duplicate cooldown scenario    | Implemented, pending run                                      | `duplicate-cooldown.yaml` captures cooldown suppression for package 1                                      | Mark pass after Wokwi CLI scenario completes successfully.                         |
+| M12 - Wokwi delivery package 1 scenario    | Implemented, pending run                                      | `delivery-package-1.yaml` captures package 1 EPC with `[SCENARIO] CTX=delivered` and `[SCENARIO] ACTIVE=0` | Mark pass after Wokwi CLI scenario completes successfully.                         |
 
 ### Verification Commands
 
@@ -117,10 +123,27 @@ Compile project
 pio run
 ```
 
+Custom chip workflow:
+
+```powershell
+wokwi-cli chip compile chips/pn532.chip.c -o chips/pn532.chip.wasm
+wokwi-cli chip compile chips/gps-neo6m.chip.c -o chips/gps-neo6m.chip.wasm
+pio run
+```
+
 Running simulation
 
 ```powershell
-wokwi-cli --timeout 10000 --serial-log-file logs/wokwi-cli-{datetime}.log .
+wokwi-cli --timeout 10000 --serial-log-file "logs/wokwi-cli-$(Get-Date -Format 'yyyy-MM-dd_HHmm').log" .
+```
+
+Running simulated package scenarios:
+
+```powershell
+wokwi-cli --timeout 45000 --scenario scenarios/pickup-package-1.yaml --serial-log-file logs/wokwi-pickup-package-1-2026-05-06.log .
+wokwi-cli --timeout 60000 --scenario scenarios/pickup-two-packages.yaml --serial-log-file logs/wokwi-pickup-two-packages-2026-05-06.log .
+wokwi-cli --timeout 45000 --scenario scenarios/duplicate-cooldown.yaml --serial-log-file logs/wokwi-duplicate-cooldown-2026-05-06.log .
+wokwi-cli --timeout 45000 --scenario scenarios/delivery-package-1.yaml --serial-log-file logs/wokwi-delivery-package-1-2026-05-06.log .
 ```
 
 Acceptance evidence for the next documentation update:
@@ -132,6 +155,85 @@ Acceptance evidence for the next documentation update:
 Assumptions:
 
 - This document must not claim backend or full-stack completion until those components exist in the repository or a linked implementation.
+
+---
+
+## Simulated Package Scanning
+
+Version 2.1 adds deterministic simulated package scanning for Wokwi. The simulation still exercises the PN532 RFID path instead of bypassing the reader in firmware.
+
+### Simulated Package Manifest
+
+| Wokwi PN532 Card | UID Hex    | Simulated Package EPC          |
+| ---------------- | ---------- | ------------------------------ |
+| Package 1 card   | `DEADBEEF` | `LOG-PKG-20260506-JKTWH-00001` |
+| Package 2 card   | `CAFEBABE` | `LOG-PKG-20260506-JKTWH-00002` |
+
+Unknown card UIDs retain the fallback EPC format `LOG-{UID_HEX}`.
+
+### Scenario Control Path
+
+```text
+Wokwi scenario YAML
+  -> set-control pn532.card1/card2/reset
+  -> PN532 custom chip exposes virtual card UID
+  -> ESP32 firmware reads PN532 over I2C
+  -> firmware maps UID to package EPC
+  -> firmware publishes/logs scan payload with selected scan_context
+```
+
+The PN532 custom chip exposes these controls:
+
+| Control | Values     | Purpose                                                |
+| ------- | ---------- | ------------------------------------------------------ |
+| `card1` | `0` or `1` | Remove or place simulated package 1 in the RFID field. |
+| `card2` | `0` or `1` | Remove or place simulated package 2 in the RFID field. |
+| `reset` | `0` or `1` | Clear the active RFID field in the PN532 chip.         |
+
+### Serial Scenario Commands
+
+The firmware accepts serial-only commands for Wokwi test automation:
+
+| Command               | Effect                                                                                       |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `SCENARIO PICKUP`     | Arms the next RFID scan with `scan_context = "pickup"`.                                      |
+| `SCENARIO IN_TRANSIT` | Arms the next RFID scan with `scan_context = "in_transit"`.                                  |
+| `SCENARIO DELIVERED`  | Arms the next RFID scan with `scan_context = "delivered"`.                                   |
+| `SCENARIO RESET`      | Clears scenario context, RFID cooldowns, simulated onboard package state, and scan counters. |
+| `FORCE_SCAN`          | Clears RFID cooldown and immediately attempts one RFID scan.                                 |
+
+If no scenario context is armed, the firmware preserves its existing GPS-speed fallback: stationary scans resolve to `pickup`, moving scans resolve to `in_transit`.
+
+### Counter Rules
+
+| Scan Context              | Counter Behavior                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| `pickup`                  | Increments `active_package_count` once per known package that is not already onboard. |
+| `in_transit`              | Leaves `active_package_count` unchanged.                                              |
+| `delivered`               | Decrements `active_package_count` only when the known package is onboard.             |
+| Duplicate within cooldown | Suppresses scan and logs `in cooldown - suppressed`; counters are unchanged.          |
+
+---
+
+## Testable Wokwi Scenarios
+
+| Scenario File                        | Purpose                                                                | Expected Serial Evidence                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `scenarios/pickup-package-1.yaml`    | Validate a single pickup scan for package 1.                           | `[SCENARIO] EPC=LOG-PKG-20260506-JKTWH-00001`, `[SCENARIO] CTX=pickup`, `[SCENARIO] ACTIVE=1`    |
+| `scenarios/pickup-two-packages.yaml` | Validate two different package pickups with field reset between cards. | Package 1 EPC, package 2 EPC, `[SCENARIO] ACTIVE=2`                                              |
+| `scenarios/duplicate-cooldown.yaml`  | Validate duplicate suppression when the same card remains in field.    | Package 1 EPC, then `in cooldown - suppressed`                                                   |
+| `scenarios/delivery-package-1.yaml`  | Validate delivery scan context for package 1.                          | `[SCENARIO] EPC=LOG-PKG-20260506-JKTWH-00001`, `[SCENARIO] CTX=delivered`, `[SCENARIO] ACTIVE=0` |
+
+Scenario mechanics use Wokwi automation scenario steps and custom chip controls:
+
+- [Wokwi Automation Scenarios](https://docs.wokwi.com/wokwi-ci/automation-scenarios)
+- [Wokwi Custom Chip Controls](https://docs.wokwi.com/chips-api/chip-json/)
+- [Wokwi Attributes API](https://docs.wokwi.com/chips-api/attributes/)
+
+Custom chip rule:
+
+- Any edit to `chips/pn532.chip.c` or `chips/gps-neo6m.chip.c` must be followed by recompiling the matching `.wasm` file before running Wokwi.
+- After recompiling a chip, rebuild the firmware with `pio run` so the project artifact and simulation inputs stay aligned.
 
 ---
 
@@ -1034,6 +1136,6 @@ No device can publish to another device's topics or subscribe to the full broker
 ---
 
 _Document Owner: Engineering Team_
-_Version: 2.0 — replaces v1.0 (per-package GPS simulator model)_
+_Version: 2.1 — replaces v1.0 (per-package GPS simulator model)_
 _Related Document: PRD — GPS-Based Logistic Package Tracking System MVP v1.0_
 _Next Review: After device simulator implementation kickoff_
