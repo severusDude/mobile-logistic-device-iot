@@ -3,7 +3,8 @@ version: 1
 author: "Lutfi Fajar"
 
 steps:
-  - wait-serial: "Setup complete"
+  - wait-serial: "[HB] Heartbeat published. Uptime: 0s"
+  - delay: 500ms
   - write-serial: "SCENARIO DELIVERED\n"
   - wait-serial: "Next RFID scan context armed: delivered"
   - set-control:
