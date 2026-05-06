@@ -2,7 +2,7 @@
 
 ## IoT GPS-Based Logistic Package Tracking System
 
-**Version:** 2.1 (Architecture Revision — Device-Centric RFID Model + Testable Wokwi Scan Scenarios)
+**Version:** 2.2 (Firmware Modularization — Device-Centric RFID Model + Testable Wokwi Scan Scenarios)
 
 **Audience:** Full-Stack Engineering Team
 
@@ -19,6 +19,7 @@
 1. [System Overview](#1-system-overview)
    - [Implementation Status Snapshot - May 6, 2026](#implementation-status-snapshot---may-6-2026)
    - [Milestones And Verification Tracker](#milestones-and-verification-tracker)
+   - [Firmware Module Layout](#firmware-module-layout)
    - [Simulated Package Scanning](#simulated-package-scanning)
    - [Testable Wokwi Scenarios](#testable-wokwi-scenarios)
    - [Manual-Run Logging And Analyzer](#manual-run-logging-and-analyzer)
@@ -82,7 +83,8 @@ This section tracks the real implementation state of the current repository agai
 
 | Area                                           | Current State                                                                  | Verification Status                                   | Notes                                                                                                                                                                                   |
 | ---------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mobile ESP32 firmware                          | Implemented                                                                    | Passed CLI build and Wokwi boot on May 6, 2026        | Firmware targets one truck/delivery van device using ESP32, GPS, PN532 RFID, WiFi, MQTT, heartbeat, telemetry, scan publishing, command handling, offline buffering, and RFID cooldown. |
+| Mobile ESP32 firmware                          | Implemented and modularized                                                     | Passed CLI build and Wokwi boot on May 6, 2026        | Firmware targets one truck/delivery van device using ESP32, GPS, PN532 RFID, WiFi, MQTT, heartbeat, telemetry, scan publishing, command handling, offline buffering, and RFID cooldown. Runtime behavior, MQTT topics, and `log.v1` payloads are unchanged by the module split. |
+| Firmware module layout                         | Implemented                                                                    | `pio run` passed after refactor                       | `src/main.cpp` is now the thin Arduino entrypoint; focused modules own config/state, logging, connectivity/MQTT, telemetry, RFID/package state, Wokwi scenario commands, LEDs, and utilities. |
 | Wokwi simulation wiring                        | Implemented                                                                    | Passed Wokwi CLI boot and custom-chip initialization  | `diagram.json` and `wokwi.toml` define ESP32, custom NEO-6M GPS chip, custom PN532 chip, status LEDs, and generated firmware paths.                                                     |
 | GPS telemetry every 5 seconds                  | Implemented in firmware                                                        | Passed serial-log verification                        | Wokwi logs show consecutive `[TEL]` records with valid GPS fix, coordinates, and speed.                                                                                                  |
 | RFID scan publishing                           | Implemented in firmware                                                        | Passed scenario verification                          | Scenario logs show `[SCAN] Published`, mapped EPCs, scan context, active-package counters, and cooldown suppression.                                                                     |
@@ -94,7 +96,7 @@ This section tracks the real implementation state of the current repository agai
 | Remote commands                                | Implemented in firmware                                                           | End-to-end command delivery unverified                                   | Supported commands: `update_role`, `force_scan`, `set_cooldown`, and `reboot`.                                                                                                          |
 | Offline event buffer                           | Implemented in firmware                                                           | Reconnect scenario unverified                                            | RAM buffer stores up to 50 events when MQTT publish is unavailable and flushes after reconnect.                                                                                         |
 | Firmware tests                                 | Test harness exists                                                               | Not active in normal boot                                                | `runAllTests()` is present but commented out in `setup()`, so automated runtime tests are not currently executed.                                                                       |
-| PlatformIO build from this shell               | Run with `pio run`                                                               | Tested compiled successfully                          | Build completed successfully; build constants are wrapped with `#ifndef` so PlatformIO build flags can override firmware defaults.                                                       |
+| PlatformIO build from this shell               | Run with `pio run`                                                               | Tested compiled successfully after modularization     | Build completed successfully; build constants remain wrapped with `#ifndef` so PlatformIO build flags can override firmware defaults. Re-run after any firmware module change.             |
 | Wokwi CLI Simulation verification              | Ran Wokwi CLI boot and scenario commands                                         | Success                                               | Logged serial output from mobile device setup, WiFi, MQTT, GPS, RFID reader, heartbeat, telemetry, scan publish, and cooldown behavior.                                                  |
 | Fixed device simulator                         | Not implemented in this repo                                                      | Not started                                                              | Architecture describes fixed readers, but current repo contains only mobile-device firmware/simulation assets.                                                                          |
 | Backend, frontend, database, broker deployment | Not implemented in this repo                                                      | Not started                                                              | Node/Express backend, React dashboard, PostgreSQL/PostGIS, Mosquitto deployment, RFID Event Processor, and Device Registry are architecture targets, not current repository code.       |
@@ -105,7 +107,7 @@ This section tracks the real implementation state of the current repository agai
 
 | Milestone                                  | Status                                      | Evidence                                                                                                                     | Update Rule                                                                        |
 | ------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| M1 - Firmware compiles from current source | Passed on May 6, 2026                       | `pio run` completed successfully from current source tree.                                                                    | Re-run after firmware changes.                                                     |
+| M1 - Firmware compiles from current source | Passed on May 6, 2026                       | `pio run` completed successfully from the modularized source tree.                                                             | Re-run after firmware changes.                                                     |
 | M2 - Wokwi boots firmware                  | Passed on May 6, 2026                       | Wokwi CLI logs show boot, GPS UART init, PN532 firmware detection, WiFi connect, MQTT connect, heartbeat, and setup complete. | Re-run after firmware, chip, or diagram changes.                                   |
 | M3 - GPS telemetry                         | Passed on May 6, 2026                       | Serial logs show consecutive `[TEL]` events every 5 seconds with `fix=YES`, lat/lng, and speed.                               | Re-run after GPS chip or telemetry payload changes.                                |
 | M4 - PN532/RFID scan                       | Passed on May 6, 2026                       | Scenario logs show UID detection, EPC mapping, `[SCAN] Published`, context, and active-package count.                         | Re-run after RFID firmware or PN532 chip changes.                                  |
@@ -117,6 +119,22 @@ This section tracks the real implementation state of the current repository agai
 | M10 - Wokwi pickup two packages scenario   | Passed on May 6, 2026                       | `logs/wokwi-pickup-two-packages-2026-05-06-fixed2.log` captures both package EPCs and `ACTIVE=2`.                            | Re-run after scenario, firmware, or PN532 chip changes.                            |
 | M11 - Wokwi duplicate cooldown scenario    | Passed on May 6, 2026                       | `logs/wokwi-duplicate-cooldown-2026-05-06-fixed.log` captures package 1 scan followed by `in cooldown - suppressed`.          | Re-run after cooldown logic changes.                                               |
 | M12 - Wokwi delivery package 1 scenario    | Passed on May 6, 2026                       | `logs/wokwi-delivery-package-1-2026-05-06-fixed.log` captures package 1 EPC, `CTX=delivered`, and `ACTIVE=0`.                  | Re-run after scenario, firmware, or PN532 chip changes.                            |
+
+### Firmware Module Layout
+
+The mobile firmware is split into focused modules for readability while preserving the public device contract. `src/main.cpp` now only owns Arduino setup and loop orchestration.
+
+| Module | Responsibility |
+| ------ | -------------- |
+| `include/firmware_config.h` | Build-flag defaults for identity, credentials, pins, intervals, and logging flags. |
+| `include/firmware_state.h` + `src/firmware_state.cpp` | Shared runtime state, topic buffers, hardware clients, counters, timers, event buffer, and simulated package manifest. |
+| `src/logging.cpp` | `log.v1` JSONL serial logging, setup events, simple events, and state snapshots. |
+| `src/connectivity.cpp` | MQTT topic setup, WiFi/MQTT connection management, remote commands, publish buffering, and buffer flushing. |
+| `src/telemetry.cpp` | Telemetry, heartbeat, and RFID scan-event JSON payload publishing. |
+| `src/rfid.cpp` | PN532 scan handling, RFID cooldown, simulated UID-to-EPC mapping, scan context resolution, and package counters. |
+| `src/scenario.cpp` | Serial-only Wokwi scenario commands including status, force scan, context arming, and reset. |
+| `src/leds.cpp` | WiFi, MQTT, RFID, and GPS LED status behavior. |
+| `src/utils.cpp` | Scan event ID and timestamp helpers. |
 
 ### Verification Commands
 
@@ -1221,6 +1239,6 @@ No device can publish to another device's topics or subscribe to the full broker
 ---
 
 _Document Owner: Engineering Team_
-_Version: 2.1 — replaces v1.0 (per-package GPS simulator model)_
+_Version: 2.2 — replaces v1.0 (per-package GPS simulator model)_
 _Related Document: PRD — GPS-Based Logistic Package Tracking System MVP v1.0_
 _Next Review: After device simulator implementation kickoff_
