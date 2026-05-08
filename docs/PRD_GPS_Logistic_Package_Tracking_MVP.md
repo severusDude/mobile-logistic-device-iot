@@ -1,376 +1,335 @@
 # Product Requirements Document (PRD)
-## GPS-Based Logistic Package Tracking System — MVP
-**Version:** 1.0  
-**Status:** Draft  
-**Date:** April 18, 2026  
-**Platform:** Web Dashboard (Browser)  
-**Simulation Scale:** 10–50 Packages / Small Fleet  
+## IoT Logistic Controls — Research Prototype Scope
+
+**Version:** 2.0  
+**Status:** Research Scope Baseline  
+**Date:** May 7, 2026  
+**Platform:** Web dashboard + MQTT backend + simulated ESP32 IoT device  
+**Research Scale:** 1 mobile device, 1 facility, 2-3 RFID package tags  
 
 ---
 
-## 1. Executive Summary
+## 1. Purpose
 
-This document defines the MVP requirements for a simulated GPS-based Logistic Package Tracking System. The system enables logistics operators, warehouse staff, and end customers to monitor package movement in real time via an interactive map and status timeline. The MVP is browser-based, supports a small fleet of 10–50 simulated packages, and includes an alert/notification system for key logistics events.
+This document sets strict project boundaries for a research assignment. The goal is not to build a full commercial logistics platform. The goal is to demonstrate and evaluate a core Internet of Things workflow for package tracking:
 
-The simulation layer replaces physical IoT GPS hardware with a software-driven GPS data emitter, making the system fully demonstrable without physical devices.
+```text
+RFID package scan + GPS telemetry
+  -> ESP32/Wokwi simulated device
+  -> MQTT broker
+  -> backend ingestion and database persistence
+  -> simple web dashboard/progress view
+```
 
----
-
-## 2. Problem Statement
-
-Logistics operations lacking real-time visibility suffer from:
-- Delayed response to package exceptions (lost, delayed, misrouted)
-- Customer dissatisfaction from lack of shipment transparency
-- Operational inefficiency due to manual status updates by warehouse staff
-
-This MVP addresses these gaps by providing a unified tracking dashboard that simulates GPS telemetry, visualizes package movement, and proactively alerts stakeholders.
+The research focuses on whether RFID scan events and GPS telemetry can be captured, transmitted, stored, and visualized reliably enough to support a prototype logistics tracking scenario.
 
 ---
 
-## 3. Goals & Success Metrics
+## 2. Research Problem
 
-### 3.1 Goals
-- Simulate realistic GPS-based package movement for a fleet of 10–50 packages
-- Provide real-time map visualization and status timelines to three user roles
-- Deliver proactive alerts for geofence breaches, delays, and delivery events
-- Establish a clean, extensible architecture for future integration with real IoT hardware
+Logistics package tracking often depends on manual status updates and limited shipment visibility. For research scope, the problem is narrowed to:
 
-### 3.2 MVP Success Metrics
-| Metric | Target |
+- How to identify a package using RFID.
+- How to associate the package with a device location using GPS.
+- How to transmit IoT data from device to backend using MQTT.
+- How to store and display package/device tracking events in a dashboard.
+
+This research does not attempt to solve full delivery operations, routing, customer notification, fleet optimization, or enterprise user management.
+
+---
+
+## 3. Research Objectives
+
+1. Design a basic IoT package tracking architecture using ESP32, RFID, GPS, MQTT, backend storage, and web dashboard.
+2. Implement a simulated mobile IoT device that can publish telemetry, heartbeat, and RFID scan events.
+3. Implement backend ingestion that validates MQTT payloads and persists device/package events.
+4. Display latest device state, raw event logs, and package timeline information on a simple dashboard/API.
+5. Define internal package CRUD for researcher/operator package setup, RFID mapping, assignment, and status override on a small dataset.
+6. Evaluate prototype behavior using defined test scenarios and progress evidence.
+
+---
+
+## 4. Core Scope
+
+### 4.1 In Scope
+
+| Area | Boundary |
 |---|---|
-| Map refresh latency | ≤ 2 seconds |
-| Simulated packages supported | 10–50 concurrent |
-| Alert delivery time (in-app) | ≤ 5 seconds after trigger |
-| Dashboard uptime | ≥ 99% during demo/test sessions |
-| Role-based views functional | 3 roles fully operational |
+| IoT device | ESP32/Wokwi-based simulated mobile device with GPS and RFID scan behavior. |
+| RFID packages | 2-3 deterministic simulated RFID tags/packages. |
+| GPS telemetry | Mobile device publishes GPS payload at configured interval. |
+| MQTT | Local Mosquitto broker for telemetry, scan, heartbeat, and command topics. |
+| Backend | MQTT subscriber, schema validation, raw event storage, device state update, package event update. |
+| Database | PostgreSQL/Prisma schema for facility, device, package, telemetry, heartbeat, raw event, package event, unknown scan, and command records. |
+| Dashboard | Simple operator/research dashboard showing device list, event feed, and command controls. |
+| Package tracking | Package location is inferred from last scanned mobile device GPS. |
+| Package management | Internal operator/research package CRUD for a small dataset: list, create, read/detail, update metadata/status/assignment, and delete/archive. |
+| Testing | Scenario-based testing through Wokwi logs, MQTT messages, API checks, and dashboard observation. |
+| Documentation | Research progress documentation and implementation evidence. |
+
+### 4.2 Out of Scope
+
+| Removed complexity | Reason |
+|---|---|
+| Multi-role RBAC for operator/warehouse/customer | Too broad for research prototype; one researcher/operator view is enough. |
+| Public customer tracking page | Product feature, not needed to prove IoT data flow. |
+| Interactive live map | Optional future enhancement; current research can use coordinates, logs, and timeline. |
+| Geofence polygons and breach detection | Adds spatial complexity beyond core IoT pipeline. |
+| Alert/notification center | Product workflow beyond research core. |
+| Email notification stub | Not needed for IoT data-flow validation. |
+| Route optimization | Explicitly outside research scope. |
+| ETA calculation | Requires route/speed model; not core evidence. |
+| 10-50 concurrent packages | Research scale is 2-3 tags and one mobile device. |
+| 200+ package scalability | Not relevant for course prototype. |
+| Multi-tenant/company support | Enterprise feature, out of research scope. |
+| Production HTTPS and broker ACL | Security should be discussed as limitation/future work, not implemented as research requirement. |
+| Real physical deployment | Wokwi/simulation is acceptable for research evidence. |
 
 ---
 
-## 4. Scope
+## 5. Actors
 
-### In Scope (MVP)
-- Simulated GPS telemetry engine (software-based, no physical hardware)
-- Interactive real-time map with package markers
-- Package status timeline per shipment
-- Three role-based views: Operator, Warehouse Staff, End Customer
-- Alert & notification system (in-app + optional email stub)
-- Basic package CRUD (create, assign, track, deliver)
-- Geofence definition per delivery zone
-
-### Out of Scope (MVP)
-- Real physical GPS/IoT device integration
-- Mobile app (iOS/Android)
-- Route optimization engine
-- Payment or billing module
-- Multi-tenant / multi-company support
-- Advanced analytics and reporting
-
----
-
-## 5. User Personas
-
-### 5.1 Logistics Operator / Dispatcher
-**Goal:** Monitor all packages across the fleet in real time; respond to exceptions fast.  
-**Pain Points:** Lack of unified view, reactive instead of proactive management.  
-**Key Actions:** View live map of all packages, assign packages to drivers, acknowledge alerts, manually update package status.
-
-### 5.2 Warehouse Staff
-**Goal:** Scan/register packages at pickup and receiving points; update statuses at checkpoints.  
-**Pain Points:** Manual, paper-based status updates; no visibility into en-route packages.  
-**Key Actions:** Register new packages, mark packages as picked up or received, view packages assigned to their warehouse.
-
-### 5.3 End Customer (Package Recipient)
-**Goal:** Know exactly where their package is and when it will arrive.  
-**Pain Points:** Vague "in transit" messages; no proactive updates.  
-**Key Actions:** Track a specific package via tracking number, view status timeline, receive delivery alerts.
+| Actor | Description | Current scope |
+|---|---|---|
+| Researcher / Operator | Person running firmware simulation, backend worker, broker, dashboard, and test scenarios. | In scope |
+| IoT Device | Simulated mobile ESP32 device with RFID reader and GPS. | In scope |
+| Package Tag | Passive RFID identity represented by deterministic simulated tag UID/EPC. | In scope |
+| Warehouse Staff | Real operational user persona. | Out of scope |
+| End Customer | Public tracking user. | Out of scope |
+| Admin / Multi-role user manager | Product/enterprise role. | Out of scope |
 
 ---
 
 ## 6. User Stories
 
-### Logistics Operator
-- As an operator, I want to see all active packages on a live map so I can monitor fleet status at a glance.
-- As an operator, I want to receive an alert when a package deviates from its expected route or zone so I can take corrective action.
-- As an operator, I want to click on any package marker on the map to view its full status history.
-- As an operator, I want to create a new shipment and assign it a simulated GPS route.
-- As an operator, I want to filter packages by status (in transit, delayed, delivered, exception).
+### In-Scope Research Stories
 
-### Warehouse Staff
-- As warehouse staff, I want to register a new package into the system with sender, recipient, and destination details.
-- As warehouse staff, I want to mark a package as "Picked Up" when a driver collects it from the warehouse.
-- As warehouse staff, I want to see only packages relevant to my warehouse location.
-- As warehouse staff, I want to receive an alert when a package is approaching my warehouse for receiving.
+- As a researcher, I want the simulated device to publish GPS telemetry so the backend can store latest device position.
+- As a researcher, I want the simulated RFID scan to identify a package EPC so the backend can update package status.
+- As a researcher, I want the backend to store raw MQTT events so every test run has inspectable evidence.
+- As a researcher, I want a package timeline API so I can verify status changes from scan events.
+- As a researcher/operator, I want to manage package records internally so package CRUD, RFID mapping, assignment, and status override can support repeatable prototype scenarios.
+- As a researcher, I want a simple dashboard showing devices and event logs so prototype behavior can be observed during tests.
+- As a researcher, I want unknown RFID tags to be recorded separately so failure cases can be analyzed.
 
-### End Customer
-- As a customer, I want to enter my tracking number and see my package on a map.
-- As a customer, I want to see a clear timeline of my package's journey (e.g., Registered → Picked Up → In Transit → Out for Delivery → Delivered).
-- As a customer, I want to receive an in-app notification when my package is out for delivery.
-- As a customer, I want to see the estimated time of arrival (ETA) on my tracking page.
+### Deferred Product Stories
+
+- Customer public tracking.
+- Warehouse staff scoped dashboard.
+- Operator alert acknowledgement.
+- Interactive package map.
+- Geofence breach handling.
 
 ---
 
 ## 7. Functional Requirements
 
-### 7.1 GPS Simulation Engine
-| ID | Requirement |
-|---|---|
-| FR-SIM-01 | The system shall generate simulated GPS coordinates for each active package at configurable intervals (default: every 5 seconds). |
-| FR-SIM-02 | Simulated routes shall follow predefined waypoints between origin and destination. |
-| FR-SIM-03 | The engine shall support 10–50 concurrent simulated packages without degradation. |
-| FR-SIM-04 | The simulation shall support configurable speed profiles (normal, delayed, fast). |
-| FR-SIM-05 | The engine shall expose a REST/WebSocket API that the dashboard consumes. |
+### 7.1 IoT Device Simulation
 
-### 7.2 Real-Time Map
-| ID | Requirement |
-|---|---|
-| FR-MAP-01 | The dashboard shall display all active packages as markers on an interactive map. |
-| FR-MAP-02 | Package markers shall update position in near real time (≤ 2s refresh). |
-| FR-MAP-03 | Clicking a marker shall open a detail panel with package info and status timeline. |
-| FR-MAP-04 | The map shall support zoom, pan, and cluster markers when packages are nearby. |
-| FR-MAP-05 | Geofence zones (delivery areas) shall be drawn as polygons on the map. |
-| FR-MAP-06 | Packages that breach a geofence boundary shall be visually highlighted (e.g., red marker). |
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-IOT-01 | System shall run a simulated ESP32 mobile device in Wokwi or compatible environment. | Must |
+| FR-IOT-02 | Device shall simulate GPS telemetry with latitude, longitude, timestamp, and GPS fix state. | Must |
+| FR-IOT-03 | Device shall simulate RFID package scans using deterministic package identifiers. | Must |
+| FR-IOT-04 | Device shall publish telemetry, scan, and heartbeat payloads to MQTT topics. | Must |
+| FR-IOT-05 | Device may support remote commands such as force scan, cooldown update, role update, and reboot for demonstration. | Should |
 
-### 7.3 Status Timeline
-| ID | Requirement |
-|---|---|
-| FR-TL-01 | Each package shall have a status timeline showing all recorded state transitions with timestamps. |
-| FR-TL-02 | Standard statuses: Registered, Picked Up, In Transit, At Hub, Out for Delivery, Delivered, Exception. |
-| FR-TL-03 | The timeline shall display the active/current status prominently. |
-| FR-TL-04 | Timeline entries shall include location name (e.g., "Jakarta Warehouse") and GPS coordinates. |
+### 7.2 MQTT Communication
 
-### 7.4 Alert & Notification System
-| ID | Requirement |
-|---|---|
-| FR-ALT-01 | The system shall trigger alerts for the following events: geofence breach, package delay (exceeds ETA by configurable threshold), package delivered, package exception. |
-| FR-ALT-02 | In-app notifications shall appear in a notification center/bell icon within ≤ 5 seconds of the trigger event. |
-| FR-ALT-03 | Alerts shall be role-filtered: operators see all alerts; customers see only their package alerts; warehouse staff see facility-relevant alerts. |
-| FR-ALT-04 | Unread alerts shall be visually distinguished (badge count, bold text). |
-| FR-ALT-05 | The system shall support an email notification stub (logs email content to console/file for MVP; no actual email sending required). |
-| FR-ALT-06 | Operators shall be able to acknowledge and dismiss alerts. |
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-MQTT-01 | System shall use a local MQTT broker for prototype communication. | Must |
+| FR-MQTT-02 | Backend worker shall subscribe to mobile telemetry, scan, and heartbeat topics. | Must |
+| FR-MQTT-03 | Backend shall persist supported MQTT payloads as raw events. | Must |
+| FR-MQTT-04 | Backend shall reject or log invalid/unknown payloads without crashing the worker. | Must |
+| FR-MQTT-05 | Backend may publish remote device commands to mobile device command topics. | Should |
 
-### 7.5 Package Management
-| ID | Requirement |
-|---|---|
-| FR-PKG-01 | Warehouse staff and operators can create a new package with: tracking ID (auto-generated), sender info, recipient info, origin, destination, and package weight/dimensions. |
-| FR-PKG-02 | The system shall assign a simulated GPS route upon package creation. |
-| FR-PKG-03 | Operators can manually override a package's status. |
-| FR-PKG-04 | Packages can be filtered and searched by: tracking ID, status, origin, destination, date range. |
-| FR-PKG-05 | End customers access package details via a public tracking page using their tracking number (no login required). |
+### 7.3 Backend Data Processing
 
-### 7.6 Role-Based Access Control (RBAC)
-| ID | Requirement |
-|---|---|
-| FR-RBAC-01 | Three roles shall be supported: Operator, Warehouse Staff, End Customer. |
-| FR-RBAC-02 | Operators have full access to all packages, the live map, alerts, and management functions. |
-| FR-RBAC-03 | Warehouse Staff have access to packages linked to their facility; they cannot view unrelated packages or fleet-wide map. |
-| FR-RBAC-04 | End Customers access only their own package via tracking number; no login is required. |
-| FR-RBAC-05 | Authentication for Operator and Warehouse Staff roles shall use username/password (JWT-based session). |
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-BE-01 | Backend shall validate incoming payloads with explicit schemas. | Must |
+| FR-BE-02 | Backend shall update device state from telemetry and heartbeat messages. | Must |
+| FR-BE-03 | Backend shall resolve RFID EPC to a known package record. | Must |
+| FR-BE-04 | Backend shall create package event records for valid scan events. | Must |
+| FR-BE-05 | Backend shall update package current status and latest known location from scan/telemetry flow. | Must |
+| FR-BE-06 | Backend shall store unknown scans for analysis when RFID EPC is not registered. | Must |
+| FR-BE-07 | Backend shall mark stale devices offline after heartbeat timeout. | Should |
+
+### 7.4 Package Management
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-PKG-01 | System shall support internal package list and detail lookup for researcher/operator use. | Should |
+| FR-PKG-02 | System shall support internal package creation with tracking ID, RFID EPC, sender, recipient, status, and facility/device assignment fields. | Should |
+| FR-PKG-03 | System shall support internal package metadata, status, RFID EPC, facility, and device assignment updates. | Should |
+| FR-PKG-04 | System shall support package delete or archive behavior for small research datasets. | Could |
+| FR-PKG-05 | Package CRUD shall remain local/research-facing and shall not imply customer portal, RBAC, route optimization, ETA, or production shipment workflow. | Must |
+
+### 7.5 Dashboard and API
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-UI-01 | Dashboard shall show current device list and status. | Must |
+| FR-UI-02 | Dashboard shall show recent MQTT/raw event feed. | Must |
+| FR-UI-03 | Dashboard shall refresh from backend data without manual page reload. | Should |
+| FR-UI-04 | API shall expose package timeline by tracking ID for verification. | Must |
+| FR-UI-05 | Dashboard may include device command controls for demonstration. | Should |
+| FR-UI-06 | Dashboard may include internal package management screens for package list/search, create/edit, detail, assignment, and status override. | Should |
+
+### 7.6 Testing and Evidence
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-TEST-01 | Project shall include repeatable scenarios for pickup, duplicate scan handling, and delivery/status flow where available. | Must |
+| FR-TEST-02 | Test evidence shall include firmware logs, backend persisted raw events, and API/dashboard verification. | Must |
+| FR-TEST-03 | Research documentation shall track implemented, pending, and out-of-scope items. | Must |
 
 ---
 
 ## 8. Non-Functional Requirements
 
-| ID | Category | Requirement |
-|---|---|---|
-| NFR-01 | Performance | Map and timeline shall load within 3 seconds on standard broadband. |
-| NFR-02 | Scalability | Architecture shall support scaling to 200+ packages without refactoring core components. |
-| NFR-03 | Reliability | Simulation engine shall auto-restart on failure; dashboard shall show a "reconnecting" state. |
-| NFR-04 | Security | All API endpoints (except public tracking) shall require authentication. HTTPS enforced. |
-| NFR-05 | Usability | Dashboard shall be responsive for screens ≥ 1024px wide. |
-| NFR-06 | Maintainability | Codebase shall follow modular architecture; simulation layer must be swappable with real IoT data source. |
-| NFR-07 | Browser Support | Chrome 110+, Firefox 110+, Edge 110+. |
-
----
-
-## 9. System Architecture (High-Level)
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Web Dashboard (Browser)             │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ Live Map │  │Status Timeline│  │ Notifications │  │
-│  └────┬─────┘  └──────┬───────┘  └──────┬────────┘  │
-│       └───────────────┼──────────────────┘           │
-│               WebSocket / REST API                   │
-└───────────────────────┼─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│                  Backend Server                      │
-│  ┌───────────────┐   ┌──────────────────────────┐   │
-│  │  REST API     │   │  WebSocket Event Server   │   │
-│  │  (Packages,   │   │  (Live GPS updates,       │   │
-│  │   Auth, RBAC) │   │   Alerts)                 │   │
-│  └──────┬────────┘   └──────────┬───────────────┘   │
-│         └──────────────┬────────┘                    │
-│              ┌──────────▼──────────┐                 │
-│              │   GPS Simulation    │                 │
-│              │   Engine            │                 │
-│              │  (Waypoint-based    │                 │
-│              │   route emitter)    │                 │
-│              └──────────┬──────────┘                │
-└─────────────────────────┼───────────────────────────┘
-                          │
-              ┌───────────▼───────────┐
-              │      Database         │
-              │  (Packages, Routes,   │
-              │   Events, Users,      │
-              │   Geofences)          │
-              └───────────────────────┘
-```
-
-### Recommended Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React.js + Leaflet.js (map) or Mapbox GL JS |
-| Backend | Node.js + Express or FastAPI (Python) |
-| Real-time | WebSocket (Socket.IO) |
-| Database | PostgreSQL (with PostGIS for geospatial) or MongoDB |
-| Auth | JWT + bcrypt |
-| GPS Simulation | Node.js/Python background worker with waypoint interpolation |
-| Deployment (MVP) | Docker Compose (local) or single cloud VM |
-
----
-
-## 10. Data Models (Core Entities)
-
-### Package
-```json
-{
-  "tracking_id": "PKG-20260418-001",
-  "status": "in_transit",
-  "sender": { "name": "", "address": "" },
-  "recipient": { "name": "", "address": "", "email": "" },
-  "origin": { "name": "Jakarta Warehouse", "lat": -6.2088, "lng": 106.8456 },
-  "destination": { "name": "Surabaya Hub", "lat": -7.2575, "lng": 112.7521 },
-  "current_position": { "lat": -6.9, "lng": 107.6, "timestamp": "" },
-  "eta": "2026-04-18T18:00:00Z",
-  "assigned_route_id": "ROUTE-001",
-  "weight_kg": 2.5,
-  "created_at": "",
-  "updated_at": ""
-}
-```
-
-### Status Event (Timeline Entry)
-```json
-{
-  "event_id": "EVT-001",
-  "tracking_id": "PKG-20260418-001",
-  "status": "picked_up",
-  "location_name": "Jakarta Warehouse",
-  "lat": -6.2088,
-  "lng": 106.8456,
-  "timestamp": "2026-04-18T08:30:00Z",
-  "note": "Package collected by driver"
-}
-```
-
-### Alert
-```json
-{
-  "alert_id": "ALT-001",
-  "type": "geofence_breach",
-  "tracking_id": "PKG-20260418-001",
-  "message": "Package PKG-001 has exited Jakarta delivery zone.",
-  "target_roles": ["operator"],
-  "is_read": false,
-  "triggered_at": "2026-04-18T10:15:00Z"
-}
-```
-
-### Geofence
-```json
-{
-  "geofence_id": "GF-001",
-  "name": "Jakarta Delivery Zone",
-  "polygon_coordinates": [[-6.1, 106.7], [-6.1, 107.0], [-6.4, 107.0], [-6.4, 106.7]],
-  "alert_on_enter": false,
-  "alert_on_exit": true
-}
-```
-
----
-
-## 11. UX / Screen Inventory
-
-| Screen | Accessible By | Description |
-|---|---|---|
-| Login | Operator, Warehouse Staff | Username/password login |
-| Operator Dashboard | Operator | Full live map + package list + alert center |
-| Package Detail Modal | Operator, Warehouse Staff | Map focus + full status timeline for one package |
-| Package Management | Operator, Warehouse Staff | Table of packages with filters; create/edit actions |
-| Warehouse View | Warehouse Staff | Facility-scoped package list; mark picked up / received |
-| Alert Center | Operator, Warehouse Staff | List of all alerts with read/unread state; acknowledge action |
-| Public Tracking Page | End Customer | Enter tracking number → map pin + status timeline + ETA |
-| Simulation Control Panel | Operator | Start/pause/reset simulation; adjust speed profile (MVP debug tool) |
-
----
-
-## 12. Alert Trigger Matrix
-
-| Event | Operator | Warehouse Staff | End Customer |
+| ID | Category | Requirement | Boundary |
 |---|---|---|---|
-| Package registered | ✅ | ✅ (own facility) | ❌ |
-| Package picked up | ✅ | ✅ (own facility) | ✅ |
-| Geofence breach (exit) | ✅ | ❌ | ❌ |
-| Package delayed (ETA exceeded) | ✅ | ❌ | ✅ |
-| Package approaching warehouse | ✅ | ✅ (own facility) | ❌ |
-| Out for delivery | ✅ | ❌ | ✅ |
-| Delivered | ✅ | ❌ | ✅ |
-| Package exception | ✅ | ✅ (own facility) | ✅ |
+| NFR-01 | Simplicity | Prototype should prioritize clear data flow over feature breadth. | Must |
+| NFR-02 | Observability | Raw events and logs must be inspectable for research evidence. | Must |
+| NFR-03 | Maintainability | Firmware, backend schemas, processors, and UI components should remain modular. | Must |
+| NFR-04 | Reliability | Worker should handle invalid payloads and MQTT reconnect attempts without stopping normal tests. | Should |
+| NFR-05 | Performance | Dashboard/realtime feed should update within about 5 seconds during local tests. | Should |
+| NFR-06 | Security | Security limitations must be documented; production-grade auth/ACL is out of implementation scope. | Document only |
+| NFR-07 | Scalability | Scale testing beyond prototype is out of scope. | Deferred |
 
 ---
 
-## 13. Assumptions & Constraints
+## 9. Simplified Architecture
 
-- **Simulation only:** No real GPS hardware is required for the MVP. The simulation engine is the sole source of location data.
-- **Single city/region scope:** Simulated routes are scoped to a defined geographic area (e.g., Java island, Indonesia) for realism.
-- **No offline mode:** The dashboard requires an active internet/local server connection.
-- **Single warehouse per staff account** in MVP (multi-facility support deferred).
-- **Email notifications** are stubbed (logged) and not actually sent in the MVP.
-- **ETA calculation** is based on simulated speed and remaining waypoints, not real traffic data.
+```text
+Wokwi ESP32 Mobile Device
+  - GPS simulator
+  - RFID scan simulator
+  - telemetry/scan/heartbeat publisher
+        |
+        v
+Local Mosquitto Broker
+        |
+        v
+Backend Worker
+  - topic parser
+  - Zod payload validation
+  - raw event persistence
+  - device/package processors
+        |
+        v
+PostgreSQL + Prisma
+        |
+        v
+Next.js API + Dashboard
+  - health/device/raw-event/timeline endpoints
+  - internal package CRUD endpoints
+  - SSE snapshot feed
+  - simple SimCon dashboard
+```
 
 ---
 
-## 14. Milestones & Suggested MVP Timeline
+## 10. Core Data Entities
 
-| Phase | Deliverable | Estimated Duration |
+| Entity | Purpose |
+|---|---|
+| Facility | Research facility/location label. |
+| Device | Mobile IoT device identity, status, heartbeat, telemetry state. |
+| Package | Package tracking ID and RFID EPC mapping. |
+| PackageEvent | Timeline event created from scan payloads. |
+| DeviceTelemetry | GPS telemetry history. |
+| DeviceHeartbeat | Heartbeat history and device liveness evidence. |
+| RawMqttEvent | Audit log of inbound/outbound MQTT payloads. |
+| UnknownScan | Evidence for unregistered RFID tag scans. |
+| DeviceCommand | Optional command publish audit record. |
+
+Deferred entities:
+
+- Geofence.
+- Route/waypoint.
+- Alert subscription/read state.
+- Customer account/session.
+- Multi-company tenant.
+
+---
+
+## 11. Research Test Scenarios
+
+| Scenario | Expected evidence |
+|---|---|
+| Device heartbeat | Device becomes/ stays online; heartbeat stored in DB; event appears in raw logs. |
+| GPS telemetry | Device last GPS fields update; telemetry stored; terminal feed shows telemetry. |
+| Known RFID pickup | Known package EPC creates package event; package status/location updates. |
+| Unknown RFID scan | Unknown scan record created; no package update occurs. |
+| Duplicate scan handling | Duplicate event ID or firmware cooldown prevents duplicate package event. |
+| Internal package CRUD | Researcher/operator can create or update package records used by scan scenarios when package CRUD is implemented. |
+| Device offline timeout | Device status changes to offline after stale heartbeat threshold, if worker detector runs. |
+| Remote force scan command | Command record created and MQTT command published, if broker/device command path active. |
+
+---
+
+## 12. Success Criteria
+
+The research prototype is successful when:
+
+1. Simulated ESP32/Wokwi device can emit telemetry, heartbeat, and RFID scan data.
+2. Backend worker can receive MQTT messages and persist raw events.
+3. Known RFID EPC can be resolved to package record.
+4. Package timeline can show scan-derived status events.
+5. Internal package CRUD scope is either implemented with local API/UI evidence or clearly tracked as an in-scope pending work item.
+6. Dashboard/API can show device state and event feed during local test.
+7. Research documentation clearly separates implemented, pending, and out-of-scope work.
+
+---
+
+## 13. Explicit Non-Goals
+
+The following must not be treated as required for this research prototype:
+
+- Customer-facing tracking portal.
+- Full operator/warehouse/customer RBAC.
+- Production authentication and HTTPS enforcement.
+- Geofence alerting.
+- Delivery ETA.
+- Route optimization.
+- Interactive map clustering.
+- Email/push notification.
+- Large fleet simulation.
+- Multi-tenant deployment.
+- Real hardware procurement.
+
+---
+
+## 14. Milestones
+
+| Phase | Deliverable | Status tracking |
 |---|---|---|
-| Phase 1 | Project setup, DB schema, Auth, RBAC | 1 week |
-| Phase 2 | GPS Simulation Engine + WebSocket API | 1 week |
-| Phase 3 | Live Map Frontend + Package Markers | 1 week |
-| Phase 4 | Status Timeline + Package Management UI | 1 week |
-| Phase 5 | Alert & Notification System | 1 week |
-| Phase 6 | Warehouse Staff View + Customer Tracking Page | 1 week |
-| Phase 7 | Integration Testing + Bug Fixes + Demo Prep | 1 week |
-| **Total** | **Full MVP** | **~7 weeks** |
+| Phase 1 | Firmware simulation and scenario evidence | Track in research documentation |
+| Phase 2 | MQTT broker + backend worker ingestion | Track in research documentation |
+| Phase 3 | Database schema + seed package/device data | Track in research documentation |
+| Phase 4 | Device/package API and timeline verification | Track in research documentation |
+| Phase 5 | Simple dashboard observation | Track in research documentation |
+| Phase 6 | Final testing, limitations, and report writing | Track in research documentation |
 
 ---
 
-## 15. Open Questions
-
-1. Should the simulation support **multi-stop routes** (e.g., package passes through a hub before final delivery)?
-2. Is a **Simulation Control Panel** (start/pause/reset) needed for all operators, or only for admin/demo purposes?
-3. Should geofences be **pre-configured** or allow operators to draw custom zones on the map?
-4. What is the **delay threshold** (in minutes past ETA) before a "delayed" alert is triggered?
-5. Should the public tracking page require any form of **verification** (e.g., last 4 digits of phone) or be open by tracking number alone?
-
----
-
-## 16. Glossary
+## 15. Glossary
 
 | Term | Definition |
 |---|---|
-| GPS Simulation Engine | Software module that emits fake GPS coordinates following predefined routes, replacing real IoT hardware |
-| Geofence | A virtual geographic boundary; the system triggers alerts when a package enters or exits it |
-| Waypoint | A GPS coordinate checkpoint along a simulated delivery route |
-| ETA | Estimated Time of Arrival, calculated from current position and remaining route |
-| Tracking ID | Unique auto-generated identifier for each package (e.g., PKG-20260418-001) |
-| WebSocket | A persistent, bidirectional connection used to push live GPS updates to the browser without polling |
-| RBAC | Role-Based Access Control; restricts system features based on the user's assigned role |
+| RFID EPC | Package identity code read by device. |
+| Mobile device | Simulated truck/transport device with GPS and RFID reader. |
+| Telemetry | GPS/location payload sent by device. |
+| Heartbeat | Device liveness/health payload. |
+| Scan event | RFID package read event. |
+| Raw event | Stored MQTT payload for audit/evidence. |
+| Package timeline | Ordered package status/history events. |
+| Research prototype | Limited implementation built to demonstrate and evaluate technical feasibility. |
 
 ---
 
-*Document Owner: Product Team*  
-*Next Review: After stakeholder feedback on open questions (Section 15)*
+*Document Owner: Researcher / Engineering Student*  
+*Next Review: After scenario testing and report chapter updates.*
